@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 /// Any type that can be represented as a Var.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
-    fn to_repr(&self, count: usize) -> Var {
+    fn to_var_repr(&self, count: usize) -> Var {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::Hasher;
 
@@ -25,7 +25,7 @@ macro_rules! varrepresentable_impl {
     };
 }
 
-varrepresentable_impl! {i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, String, &'static str}
+varrepresentable_impl! {i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, char, String, &'static str}
 
 /// Provides an intermediate representation used for hashing a VarRepresentable
 /// type and it's corresponding hash.
@@ -95,19 +95,20 @@ where
     extended_mapping
 }
 
-trait Walkable<T> {
+pub trait Walkable<T> {
     fn walk(&self, term: &Term<T>) -> Term<T>;
 }
 
-impl<T: VarRepresentable, TM: AsRef<TermMapping<T>>> Walkable<T> for TM {
+impl<T> Walkable<T> for TermMapping<T>
+where
+    T: VarRepresentable,
+{
     fn walk(&self, term: &Term<T>) -> Term<T> {
-        let mapping = self.as_ref();
-
         // recurse down the terms until either a Value is encounter or no
         // further walking can occur.
         let mut current_term = term.clone();
         while let Term::Var(var) = &current_term {
-            match mapping.get(var) {
+            match self.get(var) {
                 Some(next) => current_term = next.clone(),
                 None => break,
             }
@@ -117,15 +118,32 @@ impl<T: VarRepresentable, TM: AsRef<TermMapping<T>>> Walkable<T> for TM {
     }
 }
 
-fn walk<T, M>(mapping: M, term: &Term<T>) -> Term<T>
+pub fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
 where
     T: VarRepresentable,
     M: Walkable<T>,
 {
-    mapping.walk(term)
+    Walkable::walk(mapping, term)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_walk_until_expected_value() {
+        let a = 'a'.to_var_repr(0);
+        let b = 'b'.to_var_repr(0);
+
+        let mapping: TermMapping<u8> = {
+            let mut mapping = HashMap::new();
+            mapping.insert(a, Term::Var(b));
+            mapping.insert(b, Term::Value(2));
+            mapping
+        };
+
+        // assert both values reify to the value of 2
+        assert_eq!(walk(&mapping, &Term::Var(a)), Term::Value(2));
+        assert_eq!(walk(&mapping, &Term::Var(b)), Term::Value(2));
+    }
 }
