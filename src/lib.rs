@@ -115,6 +115,43 @@ where
     Walkable::walk(mapping, term)
 }
 
+// Represents a calleable stream of states.
+pub type Stream<T> = Vec<State<T>>;
+
+pub trait Goal<T> {
+    fn apply(&self, state: State<T>) -> Stream<T>;
+}
+
+impl<F, T> Goal<T> for F
+where
+    F: Fn(State<T>) -> Stream<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        self(state)
+    }
+}
+
+pub struct BoxedGoal<'a, T> {
+    goal: Box<dyn Goal<T> + 'a>,
+}
+
+impl<'a, T> BoxedGoal<'a, T> {
+    pub fn new<S>(state: S) -> Self
+    where
+        S: Goal<T> + 'a,
+    {
+        BoxedGoal {
+            goal: Box::new(state),
+        }
+    }
+}
+
+impl<'a, T> Goal<T> for BoxedGoal<'a, T> {
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        self.goal.apply(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
