@@ -84,17 +84,6 @@ impl<T> AsRef<TermMapping<T>> for State<T> {
     }
 }
 
-fn extend_mapping<T, PM>(source: Var, term: Term<T>, prev_mapping: PM) -> TermMapping<T>
-where
-    T: VarRepresentable,
-    PM: AsRef<TermMapping<T>>,
-{
-    let mut extended_mapping = prev_mapping.as_ref().clone();
-    extended_mapping.insert(source, term);
-
-    extended_mapping
-}
-
 pub trait Walkable<T> {
     fn walk(&self, term: &Term<T>) -> Term<T>;
 }
