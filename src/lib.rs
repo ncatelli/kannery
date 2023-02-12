@@ -67,12 +67,14 @@ impl<T> Term<T> {
 
 /// A map representing potentially recursive Variable to Terminal mappings.
 pub type TermMapping<T> = HashMap<Var, Term<T>>;
+pub type ReprMapping = HashMap<Var, String>;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct State<T> {
     variable_count: usize,
-
     term_mapping: TermMapping<T>,
+
+    repr_mapping: ReprMapping,
 }
 impl<T: Default> State<T> {
     pub fn empty() -> Self {
@@ -82,10 +84,15 @@ impl<T: Default> State<T> {
 
 impl<T> State<T> {
     #[must_use]
-    pub fn new(variable_count: usize, term_mapping: TermMapping<T>) -> Self {
+    pub fn new(
+        variable_count: usize,
+        term_mapping: TermMapping<T>,
+        repr_mapping: ReprMapping,
+    ) -> Self {
         Self {
             variable_count,
             term_mapping,
+            repr_mapping,
         }
     }
 }
@@ -99,6 +106,40 @@ impl<T> AsRef<TermMapping<T>> for State<T> {
 impl<T> AsMut<TermMapping<T>> for State<T> {
     fn as_mut(&mut self) -> &mut TermMapping<T> {
         &mut self.term_mapping
+    }
+}
+
+impl<T: VarRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "State<{}> ", std::any::type_name::<T>())?;
+        let mut dm = f.debug_map();
+
+        for k in self.term_mapping.keys() {
+            match (self.repr_mapping.get(k), self.term_mapping.get(k)) {
+                // key cannot be resolved and term is a var.
+                (None, Some(Term::Var(var))) => match self.repr_mapping.get(var) {
+                    Some(val_repr) => dm.entry(k, val_repr),
+                    None => dm.entry(k, var),
+                },
+                // key can be resolved and term is a var.
+                (Some(key_repr), Some(Term::Var(var))) => match self.repr_mapping.get(var) {
+                    Some(val_repr) => dm.entry(key_repr, val_repr),
+                    None => dm.entry(key_repr, var),
+                },
+
+                // key cannot be resolved and term is a value.
+                (None, Some(t @ Term::Value(_))) => dm.entry(k, t),
+
+                // key can be resolved and term is a value.
+                (Some(repr), Some(t @ Term::Value(_))) => dm.entry(repr, t),
+
+                // by nature of the k being pulled from the map, this state
+                // should be unreachable and should panic if it is ever reached.
+                (_, None) => unreachable!(),
+            };
+        }
+
+        dm.finish()
     }
 }
 
@@ -209,7 +250,11 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
 
         // Return an empty stream if the mapping is `None`.
         unified_mapping.map_or_else(Stream::new, |term_mapping| {
-            vec![State::new(state.variable_count, term_mapping)]
+            vec![State::new(
+                state.variable_count,
+                term_mapping,
+                state.repr_mapping,
+            )]
         })
     }
 }
@@ -230,12 +275,9 @@ mod tests {
         let a = 'a'.to_var_repr(0);
         let b = 'b'.to_var_repr(0);
 
-        let mapping: TermMapping<u8> = {
-            let mut mapping = HashMap::new();
-            mapping.insert(a, Term::Var(b));
-            mapping.insert(b, Term::Value(2));
-            mapping
-        };
+        let mapping: TermMapping<u8> = [(a, Term::Var(b)), (b, Term::Value(2))]
+            .into_iter()
+            .collect();
 
         // assert both values reify to the value of 2
         assert_eq!(walk(&mapping, &Term::Var(a)), Term::Value(2));
@@ -247,21 +289,33 @@ mod tests {
         let a = 'a'.to_var_repr(0);
         let b = 'b'.to_var_repr(0);
         let c = 'c'.to_var_repr(0);
+        let d = 'd'.to_var_repr(0);
 
-        let mapping: TermMapping<u8> = {
-            let mut mapping = HashMap::new();
-            mapping.insert(a, Term::Var(b));
-            mapping.insert(b, Term::Value(1));
-            mapping.insert(c, Term::Value(1));
+        let term_mapping: TermMapping<u8> = [
+            (a, Term::Var(b)),
+            (b, Term::Var(c)),
+            (c, Term::Value(1)),
+            (d, Term::Value(2)),
+        ]
+        .into_iter()
+        .collect();
 
-            mapping
-        };
+        let repr_mapping: ReprMapping = [
+            (a, 'a'.to_string()),
+            (b, 'b'.to_string()),
+            (c, 'c'.to_string()),
+            (d, 'd'.to_string()),
+        ]
+        .into_iter()
+        .collect();
 
         let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(c));
+        let stream = goal.apply(State::new(0, term_mapping.clone(), repr_mapping.clone()));
+        assert!(stream.len() == 1);
+        assert_eq!(4, stream[0].as_ref().len());
 
-        let stream = goal.apply(State::new(0, mapping));
-
-        println!("a={:?}\nb={:?}\nc={:?}", a, b, c);
-        println!("{:?}", &stream);
+        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(d));
+        let stream = goal.apply(State::new(0, term_mapping, repr_mapping));
+        assert!(stream.is_empty());
     }
 }
