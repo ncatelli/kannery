@@ -53,10 +53,22 @@ pub enum Term<T> {
     Value(T),
 }
 
+impl<T> Term<T> {
+    /// Returns a boolean signifying if the type is a `Var` variant.
+    pub fn is_var(&self) -> bool {
+        matches!(self, Term::Var(_))
+    }
+
+    /// Returns a boolean signifying if the type is a `Value` variant.
+    pub fn is_value(&self) -> bool {
+        matches!(self, Term::Value(_))
+    }
+}
+
 /// A map representing potentially recursive Variable to Terminal mappings.
 pub type TermMapping<T> = HashMap<Var, Term<T>>;
 
-#[derive(Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct State<T> {
     variable_count: usize,
 
@@ -84,7 +96,13 @@ impl<T> AsRef<TermMapping<T>> for State<T> {
     }
 }
 
-pub trait Walkable<T> {
+impl<T> AsMut<TermMapping<T>> for State<T> {
+    fn as_mut(&mut self) -> &mut TermMapping<T> {
+        &mut self.term_mapping
+    }
+}
+
+pub trait Walkable<T>: Clone {
     fn walk(&self, term: &Term<T>) -> Term<T>;
 }
 
@@ -113,6 +131,26 @@ where
     M: Walkable<T>,
 {
     Walkable::walk(mapping, term)
+}
+
+pub fn unify<T: VarRepresentable>(
+    mapping: &TermMapping<T>,
+    term1: &Term<T>,
+    term2: &Term<T>,
+) -> Option<TermMapping<T>> {
+    let t1_target = walk(mapping, term1);
+    let t2_target = walk(mapping, term2);
+    let mut mapping = mapping.clone();
+
+    match (t1_target, t2_target) {
+        (Term::Var(v1), Term::Var(v2)) if v1 == v2 => Some(mapping),
+        (Term::Var(v), t) | (t, Term::Var(v)) => {
+            mapping.insert(v, t);
+            Some(mapping)
+        }
+        (Term::Value(v1), Term::Value(v2)) if v1 == v2 => Some(mapping),
+        _ => None,
+    }
 }
 
 // Represents a calleable stream of states.
@@ -152,6 +190,37 @@ impl<'a, T> Goal<T> for BoxedGoal<'a, T> {
     }
 }
 
+#[derive(Debug)]
+pub struct Equal<T: VarRepresentable> {
+    term1: Term<T>,
+    term2: Term<T>,
+}
+
+impl<T: VarRepresentable> Equal<T> {
+    pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
+        Self { term1, term2 }
+    }
+}
+
+impl<T: VarRepresentable> Goal<T> for Equal<T> {
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        let sub_mapping = state.as_ref();
+        let unified_mapping = unify(sub_mapping, &self.term1, &self.term2);
+
+        // Return an empty stream if the mapping is `None`.
+        unified_mapping.map_or_else(Stream::new, |term_mapping| {
+            vec![State::new(state.variable_count, term_mapping)]
+        })
+    }
+}
+
+pub fn eq<T: VarRepresentable>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    Equal<T>: Goal<T>,
+{
+    Equal::new(term1, term2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +240,28 @@ mod tests {
         // assert both values reify to the value of 2
         assert_eq!(walk(&mapping, &Term::Var(a)), Term::Value(2));
         assert_eq!(walk(&mapping, &Term::Var(b)), Term::Value(2));
+    }
+
+    #[test]
+    fn should_unify_equal_values() {
+        let a = 'a'.to_var_repr(0);
+        let b = 'b'.to_var_repr(0);
+        let c = 'c'.to_var_repr(0);
+
+        let mapping: TermMapping<u8> = {
+            let mut mapping = HashMap::new();
+            mapping.insert(a, Term::Var(b));
+            mapping.insert(b, Term::Value(1));
+            mapping.insert(c, Term::Value(1));
+
+            mapping
+        };
+
+        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(c));
+
+        let stream = goal.apply(State::new(0, mapping));
+
+        println!("a={:?}\nb={:?}\nc={:?}", a, b, c);
+        println!("{:?}", &stream);
     }
 }
