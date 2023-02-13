@@ -389,4 +389,33 @@ mod tests {
         let stream = goal.apply(state);
         assert!(stream.is_empty());
     }
+
+    #[test]
+    fn should_declare_variables_via_fresh_operation() {
+        let a = 'a'.to_var_repr(0);
+        let b = 'b'.to_var_repr(0);
+        let c = 'c'.to_var_repr(0);
+
+        let goal = fresh(
+            |state| {
+                [
+                    ('a', Term::Var(b)),
+                    ('b', Term::Var(c)),
+                    ('c', Term::Value(1)),
+                    ('d', Term::Value(2)),
+                ]
+                .into_iter()
+                .fold(state, |mut acc, (var, term)| {
+                    acc.insert(var, term);
+                    acc
+                })
+            },
+            eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+        );
+
+        let stream = goal.apply(State::empty());
+        assert!(stream.len() == 1);
+        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
+        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
+    }
 }
