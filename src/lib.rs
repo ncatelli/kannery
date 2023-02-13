@@ -73,10 +73,11 @@ impl<T: ValueRepresentable> Term<T> {
 /// A map representing potentially recursive Variable to Terminal mappings.
 pub type TermMapping<T> = HashMap<Var, Term<T>>;
 pub type ReprMapping = HashMap<Var, String>;
+pub type OccurrenceCounter = HashMap<String, usize>;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct State<T: ValueRepresentable> {
-    variable_count: usize,
+    occurence_counter: OccurrenceCounter,
     term_mapping: TermMapping<T>,
 
     repr_mapping: ReprMapping,
@@ -90,15 +91,30 @@ impl<T: Default + ValueRepresentable> State<T> {
 impl<T: ValueRepresentable> State<T> {
     #[must_use]
     pub fn new(
-        variable_count: usize,
+        occurence_counter: OccurrenceCounter,
         term_mapping: TermMapping<T>,
         repr_mapping: ReprMapping,
     ) -> Self {
         Self {
-            variable_count,
+            occurence_counter,
             term_mapping,
             repr_mapping,
         }
+    }
+}
+
+impl<T: ValueRepresentable> State<T> {
+    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR, term: Term<T>) {
+        let repr = key.to_string();
+        let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
+        let var = key.to_var_repr(occurrences);
+
+        self.occurence_counter
+            .entry(repr.clone())
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+        self.repr_mapping.entry(var).or_insert(repr);
+        self.term_mapping.insert(var, term);
     }
 }
 
@@ -114,7 +130,7 @@ impl<T: ValueRepresentable> AsMut<TermMapping<T>> for State<T> {
     }
 }
 
-impl<T: VarRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
+impl<T: ValueRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "State<{}> ", std::any::type_name::<T>())?;
         let mut dm = f.debug_map();
@@ -301,7 +317,7 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
         // Return an empty stream if the mapping is `None`.
         unified_mapping.map_or_else(Stream::new, |term_mapping| {
             vec![State::new(
-                state.variable_count,
+                state.occurence_counter,
                 term_mapping,
                 state.repr_mapping,
             )]
@@ -320,6 +336,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! prepare_state {
+        ($(($var:literal, $term:expr)),*) => {
+            [
+                $(
+                ($var, $term),
+                )*
+            ]
+            .into_iter()
+            .fold(State::default(), |mut state, (var, term)| {
+                state.insert(var, term);
+                state
+            })
+        };
+    }
 
     #[test]
     fn should_walk_until_expected_value() {
@@ -341,32 +372,20 @@ mod tests {
         let b = 'b'.to_var_repr(0);
         let c = 'c'.to_var_repr(0);
         let d = 'd'.to_var_repr(0);
-
-        let term_mapping: TermMapping<u8> = [
-            (a, Term::Var(b)),
-            (b, Term::Var(c)),
-            (c, Term::Value(1)),
-            (d, Term::Value(2)),
-        ]
-        .into_iter()
-        .collect();
-
-        let repr_mapping: ReprMapping = [
-            (a, 'a'.to_string()),
-            (b, 'b'.to_string()),
-            (c, 'c'.to_string()),
-            (d, 'd'.to_string()),
-        ]
-        .into_iter()
-        .collect();
+        let state = prepare_state!(
+            ('c', Term::Value(1)),
+            ('d', Term::Value(2)),
+            ('b', Term::Var(c)),
+            ('a', Term::Var(b))
+        );
 
         let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(c));
-        let stream = goal.apply(State::new(0, term_mapping.clone(), repr_mapping.clone()));
+        let stream = goal.apply(state.clone());
         assert!(stream.len() == 1);
-        assert_eq!(4, stream[0].as_ref().len());
+        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
 
         let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(d));
-        let stream = goal.apply(State::new(0, term_mapping, repr_mapping));
+        let stream = goal.apply(state);
         assert!(stream.is_empty());
     }
 }
