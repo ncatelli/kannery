@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-/// Any type that can be represented as a Var.
+/// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
     fn to_var_repr(&self, count: usize) -> Var {
         use std::collections::hash_map::DefaultHasher;
@@ -27,6 +27,11 @@ macro_rules! varrepresentable_impl {
 
 varrepresentable_impl! {i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, char, String, &'static str}
 
+/// Any type that can be represented as a `Term::Value`.
+pub trait ValueRepresentable: Sized + Clone + Eq {}
+
+impl<T: Sized + Clone + Eq> ValueRepresentable for T {}
+
 /// Provides an intermediate representation used for hashing a VarRepresentable
 /// type and it's corresponding hash.
 #[derive(Hash)]
@@ -48,12 +53,12 @@ pub struct Var(u64);
 
 /// A Term representing either a Value or Variable.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Term<T> {
+pub enum Term<T: ValueRepresentable> {
     Var(Var),
     Value(T),
 }
 
-impl<T> Term<T> {
+impl<T: ValueRepresentable> Term<T> {
     /// Returns a boolean signifying if the type is a `Var` variant.
     pub fn is_var(&self) -> bool {
         matches!(self, Term::Var(_))
@@ -70,19 +75,19 @@ pub type TermMapping<T> = HashMap<Var, Term<T>>;
 pub type ReprMapping = HashMap<Var, String>;
 
 #[derive(Default, Clone, PartialEq, Eq)]
-pub struct State<T> {
+pub struct State<T: ValueRepresentable> {
     variable_count: usize,
     term_mapping: TermMapping<T>,
 
     repr_mapping: ReprMapping,
 }
-impl<T: Default> State<T> {
+impl<T: Default + ValueRepresentable> State<T> {
     pub fn empty() -> Self {
         Self::default()
     }
 }
 
-impl<T> State<T> {
+impl<T: ValueRepresentable> State<T> {
     #[must_use]
     pub fn new(
         variable_count: usize,
@@ -97,13 +102,13 @@ impl<T> State<T> {
     }
 }
 
-impl<T> AsRef<TermMapping<T>> for State<T> {
+impl<T: ValueRepresentable> AsRef<TermMapping<T>> for State<T> {
     fn as_ref(&self) -> &TermMapping<T> {
         &self.term_mapping
     }
 }
 
-impl<T> AsMut<TermMapping<T>> for State<T> {
+impl<T: ValueRepresentable> AsMut<TermMapping<T>> for State<T> {
     fn as_mut(&mut self) -> &mut TermMapping<T> {
         &mut self.term_mapping
     }
@@ -143,14 +148,11 @@ impl<T: VarRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
     }
 }
 
-pub trait Walkable<T>: Clone {
+pub trait Walkable<T: ValueRepresentable>: Clone {
     fn walk(&self, term: &Term<T>) -> Term<T>;
 }
 
-impl<T> Walkable<T> for TermMapping<T>
-where
-    T: VarRepresentable,
-{
+impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
     fn walk(&self, term: &Term<T>) -> Term<T> {
         // recurse down the terms until either a Value is encounter or no
         // further walking can occur.
@@ -197,12 +199,13 @@ pub fn unify<T: VarRepresentable>(
 // Represents a calleable stream of states.
 pub type Stream<T> = Vec<State<T>>;
 
-pub trait Goal<T> {
+pub trait Goal<T: ValueRepresentable> {
     fn apply(&self, state: State<T>) -> Stream<T>;
 }
 
 impl<F, T> Goal<T> for F
 where
+    T: ValueRepresentable,
     F: Fn(State<T>) -> Stream<T>,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
@@ -210,11 +213,11 @@ where
     }
 }
 
-pub struct BoxedGoal<'a, T> {
+pub struct BoxedGoal<'a, T: ValueRepresentable> {
     goal: Box<dyn Goal<T> + 'a>,
 }
 
-impl<'a, T> BoxedGoal<'a, T> {
+impl<'a, T: ValueRepresentable> BoxedGoal<'a, T> {
     pub fn new<S>(state: S) -> Self
     where
         S: Goal<T> + 'a,
@@ -225,19 +228,44 @@ impl<'a, T> BoxedGoal<'a, T> {
     }
 }
 
-impl<'a, T> Goal<T> for BoxedGoal<'a, T> {
+impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
     fn apply(&self, state: State<T>) -> Stream<T> {
         self.goal.apply(state)
     }
 }
 
 #[derive(Debug)]
-pub struct Equal<T: VarRepresentable> {
+pub struct Fresh<const N: usize> {
+    vars: [Var; N],
+}
+
+impl<const N: usize> Fresh<N> {
+    pub fn new(new_vars: [Var; N]) -> Self {
+        Self { vars: new_vars }
+    }
+}
+
+impl<T: VarRepresentable, const N: usize> Goal<T> for Fresh<N> {
+    fn apply(&self, _state: State<T>) -> Stream<T> {
+        todo!()
+    }
+}
+
+pub fn fresh<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    Equal<T>: Goal<T>,
+{
+    Equal::new(term1, term2)
+}
+
+#[derive(Debug)]
+pub struct Equal<T: ValueRepresentable> {
     term1: Term<T>,
     term2: Term<T>,
 }
 
-impl<T: VarRepresentable> Equal<T> {
+impl<T: ValueRepresentable> Equal<T> {
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
     }
@@ -259,8 +287,9 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
     }
 }
 
-pub fn eq<T: VarRepresentable>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+pub fn eq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
+    T: ValueRepresentable,
     Equal<T>: Goal<T>,
 {
     Equal::new(term1, term2)
