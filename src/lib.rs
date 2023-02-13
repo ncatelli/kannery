@@ -235,28 +235,50 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct Fresh<const N: usize> {
-    vars: [Var; N],
-}
-
-impl<const N: usize> Fresh<N> {
-    pub fn new(new_vars: [Var; N]) -> Self {
-        Self { vars: new_vars }
-    }
-}
-
-impl<T: VarRepresentable, const N: usize> Goal<T> for Fresh<N> {
-    fn apply(&self, _state: State<T>) -> Stream<T> {
-        todo!()
-    }
-}
-
-pub fn fresh<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+pub struct Fresh<T, F, G>
 where
     T: ValueRepresentable,
-    Equal<T>: Goal<T>,
+    F: Fn(State<T>) -> State<T>,
+    G: Goal<T>,
 {
-    Equal::new(term1, term2)
+    _value_kind: std::marker::PhantomData<T>,
+    var_decl_fn: F,
+    goal: G,
+}
+
+impl<T, F, G> Fresh<T, F, G>
+where
+    T: ValueRepresentable,
+    F: Fn(State<T>) -> State<T>,
+    G: Goal<T>,
+{
+    pub fn new(var_decl_fn: F, goal: G) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            var_decl_fn,
+            goal,
+        }
+    }
+}
+
+impl<T, F, G> Goal<T> for Fresh<T, F, G>
+where
+    T: ValueRepresentable,
+    F: Fn(State<T>) -> State<T>,
+    G: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        let state = (self.var_decl_fn)(state);
+
+        (self.goal).apply(state)
+    }
+}
+
+pub fn fresh<T>(var_decl_fn: impl Fn(State<T>) -> State<T>, goal: impl Goal<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+{
+    Fresh::new(var_decl_fn, goal)
 }
 
 #[derive(Debug)]
