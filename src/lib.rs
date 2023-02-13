@@ -379,10 +379,11 @@ mod tests {
             ('a', Term::Var(b))
         );
 
-        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(c));
+        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(b));
         let stream = goal.apply(state.clone());
         assert!(stream.len() == 1);
         assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
+        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
 
         let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(d));
         let stream = goal.apply(state);
