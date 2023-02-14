@@ -215,6 +215,13 @@ pub fn unify<T: VarRepresentable>(
 // Represents a calleable stream of states.
 pub type Stream<T> = Vec<State<T>>;
 
+pub fn mplus<T: ValueRepresentable>(stream1: Stream<T>, mut stream2: Stream<T>) -> Stream<T> {
+    let mut stream = stream1;
+    stream.append(&mut stream2);
+
+    stream
+}
+
 pub trait Goal<T: ValueRepresentable> {
     fn apply(&self, state: State<T>) -> Stream<T>;
 }
@@ -333,6 +340,53 @@ where
     Equal::new(term1, term2)
 }
 
+pub struct Disjoint<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    _value_kind: std::marker::PhantomData<T>,
+    goal1: G1,
+    goal2: G2,
+}
+
+impl<T, G1, G2> Disjoint<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    pub fn new(goal1: G1, goal2: G2) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            goal1,
+            goal2,
+        }
+    }
+}
+
+impl<T, G1, G2> Goal<T> for Disjoint<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        let stream1 = self.goal1.apply(state.clone());
+        let stream2 = self.goal2.apply(state);
+
+        mplus(stream1, stream2)
+    }
+}
+
+pub fn disjoint<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+{
+    Disjoint::new(goal1, goal2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,26 +450,59 @@ mod tests {
         let b = 'b'.to_var_repr(0);
         let c = 'c'.to_var_repr(0);
 
-        let goal = fresh(
-            |state| {
-                [
-                    ('a', Term::Var(b)),
-                    ('b', Term::Var(c)),
-                    ('c', Term::Value(1)),
-                    ('d', Term::Value(2)),
-                ]
-                .into_iter()
-                .fold(state, |mut acc, (var, term)| {
-                    acc.insert(var, term);
-                    acc
-                })
-            },
-            eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
-        );
+        let var_declarator = |state: State<u8>| {
+            [
+                ('a', Term::Var(b)),
+                ('b', Term::Var(c)),
+                ('c', Term::Value(1)),
+                ('d', Term::Value(2)),
+            ]
+            .into_iter()
+            .fold(state, |mut acc, (var, term)| {
+                acc.insert(var, term);
+                acc
+            })
+        };
+
+        let goal = fresh(var_declarator, eq(Term::<u8>::Var(a), Term::<u8>::Var(b)));
 
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 1);
         assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
         assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
+    }
+
+    #[test]
+    #[ignore = "currently being implemented."]
+    fn should_evaluate_disjoint_operation() {
+        let a = 'a'.to_var_repr(0);
+        let b = 'b'.to_var_repr(0);
+        let c = 'c'.to_var_repr(0);
+        let d = 'd'.to_var_repr(0);
+
+        let var_declarator = |state: State<u8>| {
+            [
+                ('a', Term::Var(b)),
+                ('b', Term::Var(c)),
+                ('c', Term::Value(1)),
+                ('d', Term::Value(2)),
+            ]
+            .into_iter()
+            .fold(state, |mut acc, (var, term)| {
+                acc.insert(var, term);
+                acc
+            })
+        };
+
+        let goal = fresh(
+            var_declarator,
+            disjoint(
+                eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+                eq(Term::<u8>::Var(a), Term::<u8>::Var(d)),
+            ),
+        );
+
+        let stream = goal.apply(State::empty());
+        assert!(stream.len() == 2);
     }
 }
