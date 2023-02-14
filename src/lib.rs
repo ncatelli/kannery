@@ -9,12 +9,11 @@ pub trait VarRepresentable: Sized + Clone + Hash + Eq {
 
         let mut hasher = DefaultHasher::new();
 
-        let var_ir = VarHashIntermediateRepr::new(count, self);
-        var_ir.hash(&mut hasher);
+        self.hash(&mut hasher);
 
-        let var_ptr = hasher.finish();
+        let var_repr = hasher.finish();
 
-        Var(var_ptr)
+        Var::new(var_repr, count)
     }
 }
 
@@ -32,24 +31,26 @@ pub trait ValueRepresentable: Sized + Clone + Eq {}
 
 impl<T: Sized + Clone + Eq> ValueRepresentable for T {}
 
-/// Provides an intermediate representation used for hashing a VarRepresentable
-/// type and it's corresponding hash.
-#[derive(Hash)]
-struct VarHashIntermediateRepr<'a, T: VarRepresentable> {
-    count: usize,
-    val: &'a T,
-}
-
-impl<'a, T: VarRepresentable> VarHashIntermediateRepr<'a, T> {
-    #[must_use]
-    fn new(count: usize, val: &'a T) -> Self {
-        Self { count, val }
-    }
-}
-
 /// Represents a unique Var derived from a hashed input and the variable count.
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Var(u64);
+pub struct Var {
+    base: u64,
+    count: usize,
+}
+
+impl Var {
+    pub fn new(base: u64, count: usize) -> Self {
+        Self { base, count }
+    }
+
+    pub fn as_base(&self) -> u64 {
+        self.base
+    }
+
+    pub fn as_count(&self) -> usize {
+        self.count
+    }
+}
 
 /// A Term representing either a Value or Variable.
 #[derive(Debug, Clone, PartialEq, Eq)]
