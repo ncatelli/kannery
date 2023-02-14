@@ -262,25 +262,23 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
 pub struct Fresh<T, F, G>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> State<T>,
     G: Goal<T>,
+    F: Fn() -> G,
 {
     _value_kind: std::marker::PhantomData<T>,
-    var_decl_fn: F,
-    goal: G,
+    func: F,
 }
 
 impl<T, F, G> Fresh<T, F, G>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> State<T>,
+    F: Fn() -> G,
     G: Goal<T>,
 {
-    pub fn new(var_decl_fn: F, goal: G) -> Self {
+    pub fn new(func: F) -> Self {
         Self {
             _value_kind: std::marker::PhantomData,
-            var_decl_fn,
-            goal,
+            func,
         }
     }
 }
@@ -288,21 +286,21 @@ where
 impl<T, F, G> Goal<T> for Fresh<T, F, G>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> State<T>,
+    F: Fn() -> G,
     G: Goal<T>,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        let state = (self.var_decl_fn)(state);
-
-        (self.goal).apply(state)
+        (self.func)().apply(state)
     }
 }
 
-pub fn fresh<T>(var_decl_fn: impl Fn(State<T>) -> State<T>, goal: impl Goal<T>) -> impl Goal<T>
+pub fn fresh<T, F, G>(func: F) -> impl Goal<T>
 where
     T: ValueRepresentable,
+    G: Goal<T>,
+    F: Fn() -> G,
 {
-    Fresh::new(var_decl_fn, goal)
+    Fresh::new(func)
 }
 
 #[derive(Debug)]
@@ -448,62 +446,32 @@ mod tests {
     #[test]
     fn should_declare_variables_via_fresh_operation() {
         let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-        let c = 'c'.to_var_repr(0);
 
-        let var_declarator = |state: State<u8>| {
-            [
-                ('a', Term::Var(b)),
-                ('b', Term::Var(c)),
-                ('c', Term::Value(1)),
-                ('d', Term::Value(2)),
-            ]
-            .into_iter()
-            .fold(state, |mut acc, (var, term)| {
-                acc.insert(var, term);
-                acc
-            })
-        };
-
-        let goal = fresh(var_declarator, eq(Term::<u8>::Var(a), Term::<u8>::Var(b)));
+        let goal = fresh(|| eq(Term::<u8>::Var(a), Term::<u8>::Value(1)));
 
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 1);
-        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
+        assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
         assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
     }
 
     #[test]
     #[ignore = "currently being implemented."]
     fn should_evaluate_disjoint_operation() {
-        let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-        let c = 'c'.to_var_repr(0);
-        let d = 'd'.to_var_repr(0);
+        let goal = fresh(|| {
+            let a = 'a'.to_var_repr(0);
+            let b = 'b'.to_var_repr(0);
 
-        let var_declarator = |state: State<u8>| {
-            [
-                ('a', Term::Var(b)),
-                ('b', Term::Var(c)),
-                ('c', Term::Value(1)),
-                ('d', Term::Value(2)),
-            ]
-            .into_iter()
-            .fold(state, |mut acc, (var, term)| {
-                acc.insert(var, term);
-                acc
-            })
-        };
-
-        let goal = fresh(
-            var_declarator,
             disjoint(
                 eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
-                eq(Term::<u8>::Var(a), Term::<u8>::Var(d)),
-            ),
-        );
+                disjoint(
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+                    eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
+                ),
+            )
+        });
 
         let stream = goal.apply(State::empty());
-        assert!(stream.len() == 2);
+        assert!(stream.len() == 3);
     }
 }
