@@ -347,7 +347,7 @@ where
     Equal::new(term1, term2)
 }
 
-pub struct Disjoint<T, G1, G2>
+pub struct Disjunction<T, G1, G2>
 where
     T: ValueRepresentable,
     G1: Goal<T>,
@@ -358,7 +358,7 @@ where
     goal2: G2,
 }
 
-impl<T, G1, G2> Disjoint<T, G1, G2>
+impl<T, G1, G2> Disjunction<T, G1, G2>
 where
     T: ValueRepresentable,
     G1: Goal<T>,
@@ -373,7 +373,7 @@ where
     }
 }
 
-impl<T, G1, G2> Goal<T> for Disjoint<T, G1, G2>
+impl<T, G1, G2> Goal<T> for Disjunction<T, G1, G2>
 where
     T: ValueRepresentable,
     G1: Goal<T>,
@@ -387,11 +387,11 @@ where
     }
 }
 
-pub fn disjoint<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
+pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
 {
-    Disjoint::new(goal1, goal2)
+    Disjunction::new(goal1, goal2)
 }
 
 #[cfg(test)]
@@ -469,13 +469,13 @@ mod tests {
     }
 
     #[test]
-    fn should_evaluate_disjoint_operation() {
+    fn should_evaluate_disjunction_operation() {
         let goal = fresh(|mut state| {
             let a = state.define('a');
 
-            disjoint(
+            disjunction(
                 eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                disjoint(
+                disjunction(
                     eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
                     eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
                 ),
