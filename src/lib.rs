@@ -9,12 +9,11 @@ pub trait VarRepresentable: Sized + Clone + Hash + Eq {
 
         let mut hasher = DefaultHasher::new();
 
-        let var_ir = VarHashIntermediateRepr::new(count, self);
-        var_ir.hash(&mut hasher);
+        self.hash(&mut hasher);
 
-        let var_ptr = hasher.finish();
+        let var_repr = hasher.finish();
 
-        Var(var_ptr)
+        Var::new(var_repr, count)
     }
 }
 
@@ -32,24 +31,26 @@ pub trait ValueRepresentable: Sized + Clone + Eq {}
 
 impl<T: Sized + Clone + Eq> ValueRepresentable for T {}
 
-/// Provides an intermediate representation used for hashing a VarRepresentable
-/// type and it's corresponding hash.
-#[derive(Hash)]
-struct VarHashIntermediateRepr<'a, T: VarRepresentable> {
-    count: usize,
-    val: &'a T,
-}
-
-impl<'a, T: VarRepresentable> VarHashIntermediateRepr<'a, T> {
-    #[must_use]
-    fn new(count: usize, val: &'a T) -> Self {
-        Self { count, val }
-    }
-}
-
 /// Represents a unique Var derived from a hashed input and the variable count.
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Var(u64);
+pub struct Var {
+    base: u64,
+    count: usize,
+}
+
+impl Var {
+    pub fn new(base: u64, count: usize) -> Self {
+        Self { base, count }
+    }
+
+    pub fn as_base(&self) -> u64 {
+        self.base
+    }
+
+    pub fn as_count(&self) -> usize {
+        self.count
+    }
+}
 
 /// A Term representing either a Value or Variable.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +105,18 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR, term: Term<T>) {
+    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(
+        &mut self,
+        key: VAR,
+        term: Term<T>,
+    ) -> Var {
+        let var = self.define(key);
+        self.term_mapping.insert(var, term);
+
+        var
+    }
+
+    pub fn define<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -114,7 +126,8 @@ impl<T: ValueRepresentable> State<T> {
             .and_modify(|count| *count += 1)
             .or_insert(1);
         self.repr_mapping.entry(var).or_insert(repr);
-        self.term_mapping.insert(var, term);
+
+        var
     }
 }
 
@@ -215,6 +228,13 @@ pub fn unify<T: VarRepresentable>(
 // Represents a calleable stream of states.
 pub type Stream<T> = Vec<State<T>>;
 
+pub fn mplus<T: ValueRepresentable>(stream1: Stream<T>, mut stream2: Stream<T>) -> Stream<T> {
+    let mut stream = stream1;
+    stream.append(&mut stream2);
+
+    stream
+}
+
 pub trait Goal<T: ValueRepresentable> {
     fn apply(&self, state: State<T>) -> Stream<T>;
 }
@@ -251,50 +271,44 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct Fresh<T, F, G>
+pub struct Fresh<T, F>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> State<T>,
-    G: Goal<T>,
+    F: Fn(State<T>) -> Stream<T>,
 {
     _value_kind: std::marker::PhantomData<T>,
-    var_decl_fn: F,
-    goal: G,
+    func: F,
 }
 
-impl<T, F, G> Fresh<T, F, G>
+impl<T, F> Fresh<T, F>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> State<T>,
-    G: Goal<T>,
+    F: Fn(State<T>) -> Stream<T>,
 {
-    pub fn new(var_decl_fn: F, goal: G) -> Self {
+    pub fn new(func: F) -> Self {
         Self {
             _value_kind: std::marker::PhantomData,
-            var_decl_fn,
-            goal,
+            func,
         }
     }
 }
 
-impl<T, F, G> Goal<T> for Fresh<T, F, G>
+impl<T, F> Goal<T> for Fresh<T, F>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> State<T>,
-    G: Goal<T>,
+    F: Fn(State<T>) -> Stream<T>,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        let state = (self.var_decl_fn)(state);
-
-        (self.goal).apply(state)
+        (self.func).apply(state)
     }
 }
 
-pub fn fresh<T>(var_decl_fn: impl Fn(State<T>) -> State<T>, goal: impl Goal<T>) -> impl Goal<T>
+pub fn fresh<T, F>(func: F) -> impl Goal<T>
 where
     T: ValueRepresentable,
+    F: Fn(State<T>) -> Stream<T>,
 {
-    Fresh::new(var_decl_fn, goal)
+    Fresh::new(func)
 }
 
 #[derive(Debug)]
@@ -331,6 +345,53 @@ where
     Equal<T>: Goal<T>,
 {
     Equal::new(term1, term2)
+}
+
+pub struct Disjoint<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    _value_kind: std::marker::PhantomData<T>,
+    goal1: G1,
+    goal2: G2,
+}
+
+impl<T, G1, G2> Disjoint<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    pub fn new(goal1: G1, goal2: G2) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            goal1,
+            goal2,
+        }
+    }
+}
+
+impl<T, G1, G2> Goal<T> for Disjoint<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        let stream1 = self.goal1.apply(state.clone());
+        let stream2 = self.goal2.apply(state);
+
+        mplus(stream1, stream2)
+    }
+}
+
+pub fn disjoint<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+{
+    Disjoint::new(goal1, goal2)
 }
 
 #[cfg(test)]
@@ -392,30 +453,37 @@ mod tests {
 
     #[test]
     fn should_declare_variables_via_fresh_operation() {
-        let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-        let c = 'c'.to_var_repr(0);
+        let goal = fresh(|mut state| {
+            let a = state.define('a');
 
-        let goal = fresh(
-            |state| {
-                [
-                    ('a', Term::Var(b)),
-                    ('b', Term::Var(c)),
-                    ('c', Term::Value(1)),
-                    ('d', Term::Value(2)),
-                ]
-                .into_iter()
-                .fold(state, |mut acc, (var, term)| {
-                    acc.insert(var, term);
-                    acc
-                })
-            },
-            eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
-        );
+            eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
+        });
 
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 1);
-        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
-        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
+        assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
+        assert_eq!(
+            Term::Value(1),
+            stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
+        );
+    }
+
+    #[test]
+    fn should_evaluate_disjoint_operation() {
+        let goal = fresh(|mut state| {
+            let a = state.define('a');
+
+            disjoint(
+                eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+                disjoint(
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+                ),
+            )
+            .apply(state)
+        });
+
+        let stream = goal.apply(State::empty());
+        assert!(stream.len() == 3);
     }
 }
