@@ -105,7 +105,18 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR, term: Term<T>) {
+    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(
+        &mut self,
+        key: VAR,
+        term: Term<T>,
+    ) -> Var {
+        let var = self.define(key);
+        self.term_mapping.insert(var, term);
+
+        var
+    }
+
+    pub fn define<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -115,7 +126,8 @@ impl<T: ValueRepresentable> State<T> {
             .and_modify(|count| *count += 1)
             .or_insert(1);
         self.repr_mapping.entry(var).or_insert(repr);
-        self.term_mapping.insert(var, term);
+
+        var
     }
 }
 
@@ -259,21 +271,19 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct Fresh<T, F, G>
+pub struct Fresh<T, F>
 where
     T: ValueRepresentable,
-    G: Goal<T>,
-    F: Fn() -> G,
+    F: Fn(State<T>) -> Stream<T>,
 {
     _value_kind: std::marker::PhantomData<T>,
     func: F,
 }
 
-impl<T, F, G> Fresh<T, F, G>
+impl<T, F> Fresh<T, F>
 where
     T: ValueRepresentable,
-    F: Fn() -> G,
-    G: Goal<T>,
+    F: Fn(State<T>) -> Stream<T>,
 {
     pub fn new(func: F) -> Self {
         Self {
@@ -283,22 +293,20 @@ where
     }
 }
 
-impl<T, F, G> Goal<T> for Fresh<T, F, G>
+impl<T, F> Goal<T> for Fresh<T, F>
 where
     T: ValueRepresentable,
-    F: Fn() -> G,
-    G: Goal<T>,
+    F: Fn(State<T>) -> Stream<T>,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        (self.func)().apply(state)
+        (self.func).apply(state)
     }
 }
 
-pub fn fresh<T, F, G>(func: F) -> impl Goal<T>
+pub fn fresh<T, F>(func: F) -> impl Goal<T>
 where
     T: ValueRepresentable,
-    G: Goal<T>,
-    F: Fn() -> G,
+    F: Fn(State<T>) -> Stream<T>,
 {
     Fresh::new(func)
 }
@@ -445,30 +453,34 @@ mod tests {
 
     #[test]
     fn should_declare_variables_via_fresh_operation() {
-        let a = 'a'.to_var_repr(0);
+        let goal = fresh(|mut state| {
+            let a = state.define('a');
 
-        let goal = fresh(|| eq(Term::<u8>::Var(a), Term::<u8>::Value(1)));
+            eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
+        });
 
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 1);
         assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
-        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
+        assert_eq!(
+            Term::Value(1),
+            stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
+        );
     }
 
     #[test]
-    #[ignore = "currently being implemented."]
     fn should_evaluate_disjoint_operation() {
-        let goal = fresh(|| {
-            let a = 'a'.to_var_repr(0);
-            let b = 'b'.to_var_repr(0);
+        let goal = fresh(|mut state| {
+            let a = state.define('a');
 
             disjoint(
-                eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+                eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
                 disjoint(
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                    eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
                 ),
             )
+            .apply(state)
         });
 
         let stream = goal.apply(State::empty());
