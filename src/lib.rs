@@ -545,4 +545,34 @@ mod tests {
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 3);
     }
+
+    #[test]
+    fn should_evaluate_nested_fresh_calls() {
+        let goal = fresh(|mut state| {
+            let _a = state.define('a');
+
+            fresh(|mut state| {
+                let a = state.define('a');
+
+                disjunction(
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+                    disjunction(
+                        eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+                        eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+                    ),
+                )
+                .apply(state)
+            })
+            .apply(state)
+        });
+
+        let stream = goal.apply(State::empty());
+        assert!(stream.len() == 3);
+
+        // should contain 2 vars for `'a'` in the first state.
+        assert_eq!(
+            stream[0].get_vars_by_key('a').map(|vars| vars.len()),
+            Some(2)
+        );
+    }
 }
