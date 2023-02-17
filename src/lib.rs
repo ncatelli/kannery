@@ -109,7 +109,7 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    /// Define a tracked `Var` and insert a `Term<T>` for that given var.
+    /// Declare and define a tracked `Var` for a given `Term<T>`.
     ///
     /// # Examples
     ///
@@ -117,20 +117,20 @@ impl<T: ValueRepresentable> State<T> {
     /// use kannery::{State, Term};
     ///
     /// let mut state = State::<u8>::empty();
-    /// state.insert('a', Term::Value(1));
+    /// state.define('a', Term::Value(1));
     /// ```
-    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(
+    pub fn define<VAR: VarRepresentable + std::fmt::Display>(
         &mut self,
         key: VAR,
         term: Term<T>,
     ) -> Var {
-        let var = self.define(key);
+        let var = self.declare(key);
         self.term_mapping.insert(var, term);
 
         var
     }
 
-    /// Define a tracked `Var` occurrence for a given key.
+    /// Dedeclare a tracked `Var` occurrence for a given key.
     ///
     /// # Examples
     ///
@@ -138,9 +138,9 @@ impl<T: ValueRepresentable> State<T> {
     /// use kannery::State;
     ///
     /// let mut state = State::<u8>::empty();
-    /// state.define('a');
+    /// state.declare('a');
     /// ```
-    pub fn define<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
+    pub fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -164,7 +164,7 @@ impl<T: ValueRepresentable> State<T> {
     /// let state = {
     ///     let mut state = State::<u8>::empty();
     ///     for _ in 0..5 {
-    ///         state.define('a');
+    ///         state.declare('a');
     ///     }
     ///
     ///     state
@@ -362,6 +362,27 @@ where
     }
 }
 
+/// Declares a new variable.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///
+///     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert!(stream.len() == 1);
+/// assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
+/// assert_eq!(
+///     Term::Value(1),
+///     stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
+/// );
+/// ```
 pub fn fresh<T, F>(func: F) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -446,6 +467,29 @@ where
     }
 }
 
+/// Creates the disjunction of two goals. Returning all states that are valid
+/// in either goal. Logically similar to an `or`.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///
+///     disjunction(
+///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+///         disjunction(
+///             eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+///             eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+///         ),
+///     )
+///     .apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert!(stream.len() == 3);
+/// ```
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -504,9 +548,9 @@ where
 /// use kannery::*;
 ///
 /// let goal = fresh(|mut state| {
-///     let a = state.define('a');
-///     let b = state.define('b');
-///     let c = state.define('c');
+///     let a = state.declare('a');
+///     let b = state.declare('b');
+///     let c = state.declare('c');
 ///
 ///     conjunction(
 ///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
@@ -551,10 +595,10 @@ mod tests {
         let a = 'a'.to_var_repr(0);
 
         let goal = fresh(|mut state| {
-            let a = state.define('a');
-            let b = state.define('b');
-            let c = state.define('c');
-            let d = state.define('d');
+            let a = state.declare('a');
+            let b = state.declare('b');
+            let c = state.declare('c');
+            let d = state.declare('d');
 
             conjunction(
                 eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
@@ -576,69 +620,12 @@ mod tests {
     }
 
     #[test]
-    fn should_declare_variables_via_fresh_operation() {
-        let goal = fresh(|mut state| {
-            let a = state.define('a');
-
-            eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
-        });
-
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 1);
-        assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
-        assert_eq!(
-            Term::Value(1),
-            stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
-        );
-    }
-
-    #[test]
-    fn should_evaluate_disjunction_operation() {
-        let goal = fresh(|mut state| {
-            let a = state.define('a');
-
-            disjunction(
-                eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                disjunction(
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
-                ),
-            )
-            .apply(state)
-        });
-
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 3);
-    }
-
-    #[test]
-    fn should_evaluate_conjunction_operation() {
-        let goal = fresh(|mut state| {
-            let a = state.define('a');
-            let b = state.define('b');
-            let c = state.define('c');
-
-            conjunction(
-                eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                conjunction(
-                    eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
-                    eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
-                ),
-            )
-            .apply(state)
-        });
-
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 1);
-    }
-
-    #[test]
     fn should_evaluate_nested_fresh_calls() {
         let goal = fresh(|mut state| {
-            let _a = state.define('a');
+            let _a = state.declare('a');
 
             fresh(|mut state| {
-                let a = state.define('a');
+                let a = state.declare('a');
 
                 disjunction(
                     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
