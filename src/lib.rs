@@ -72,9 +72,13 @@ impl<T: ValueRepresentable> Term<T> {
 }
 
 /// A map representing potentially recursive Variable to Terminal mappings.
-pub type TermMapping<T> = HashMap<Var, Term<T>>;
-pub type ReprMapping = HashMap<Var, String>;
-pub type OccurrenceCounter = HashMap<String, usize>;
+type TermMapping<T> = HashMap<Var, Term<T>>;
+
+/// A map representing a Variable to it's string representation.
+type ReprMapping = HashMap<Var, String>;
+
+/// A map representing a Variable repr's occurrence count.
+type OccurrenceCounter = HashMap<String, usize>;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct State<T: ValueRepresentable> {
