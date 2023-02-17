@@ -116,6 +116,16 @@ impl<T: ValueRepresentable> State<T> {
         var
     }
 
+    /// Define a tracked `Var` occurrence for a given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let mut state = State::<u8>::empty();
+    /// state.define('a');
+    /// ```
     pub fn define<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
@@ -128,6 +138,41 @@ impl<T: ValueRepresentable> State<T> {
         self.repr_mapping.entry(var).or_insert(repr);
 
         var
+    }
+
+    /// Retrieves all occurrences, ordered by their occurrence of a given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let state = {
+    ///     let mut state = State::<u8>::empty();
+    ///     for _ in 0..5 {
+    ///         state.define('a');
+    ///     }
+    ///
+    ///     state
+    /// };
+    ///
+    /// let vars = state.get_vars_by_key('a');
+    /// assert!(vars.is_some());
+    /// assert_eq!(vars.map(|v| v.len()), Some(5));
+    /// ```
+    pub fn get_vars_by_key<VAR: VarRepresentable + std::fmt::Display>(
+        &self,
+        key: VAR,
+    ) -> Option<Vec<Var>> {
+        let repr = key.to_string();
+        let count = self.occurence_counter.get(&repr).copied()?;
+
+        let vars = (0..count)
+            .into_iter()
+            .map(|count| key.to_var_repr(count))
+            .collect();
+
+        Some(vars)
     }
 }
 
