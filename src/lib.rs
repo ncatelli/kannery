@@ -72,9 +72,13 @@ impl<T: ValueRepresentable> Term<T> {
 }
 
 /// A map representing potentially recursive Variable to Terminal mappings.
-pub type TermMapping<T> = HashMap<Var, Term<T>>;
-pub type ReprMapping = HashMap<Var, String>;
-pub type OccurrenceCounter = HashMap<String, usize>;
+type TermMapping<T> = HashMap<Var, Term<T>>;
+
+/// A map representing a Variable to it's string representation.
+type ReprMapping = HashMap<Var, String>;
+
+/// A map representing a Variable repr's occurrence count.
+type OccurrenceCounter = HashMap<String, usize>;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct State<T: ValueRepresentable> {
@@ -105,6 +109,16 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
+    /// Define a tracked `Var` and insert a `Term<T>` for that given var.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::{State, Term};
+    ///
+    /// let mut state = State::<u8>::empty();
+    /// state.insert('a', Term::Value(1));
+    /// ```
     pub fn insert<VAR: VarRepresentable + std::fmt::Display>(
         &mut self,
         key: VAR,
@@ -116,6 +130,16 @@ impl<T: ValueRepresentable> State<T> {
         var
     }
 
+    /// Define a tracked `Var` occurrence for a given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::State;
+    ///
+    /// let mut state = State::<u8>::empty();
+    /// state.define('a');
+    /// ```
     pub fn define<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
@@ -128,6 +152,41 @@ impl<T: ValueRepresentable> State<T> {
         self.repr_mapping.entry(var).or_insert(repr);
 
         var
+    }
+
+    /// Retrieves all occurrences, ordered by their occurrence of a given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::State;
+    ///
+    /// let state = {
+    ///     let mut state = State::<u8>::empty();
+    ///     for _ in 0..5 {
+    ///         state.define('a');
+    ///     }
+    ///
+    ///     state
+    /// };
+    ///
+    /// let vars = state.get_vars_by_key('a');
+    /// assert!(vars.is_some());
+    /// assert_eq!(vars.map(|v| v.len()), Some(5));
+    /// ```
+    pub fn get_vars_by_key<VAR: VarRepresentable + std::fmt::Display>(
+        &self,
+        key: VAR,
+    ) -> Option<Vec<Var>> {
+        let repr = key.to_string();
+        let count = self.occurence_counter.get(&repr).copied()?;
+
+        let vars = (0..count)
+            .into_iter()
+            .map(|count| key.to_var_repr(count))
+            .collect();
+
+        Some(vars)
     }
 }
 
@@ -485,5 +544,35 @@ mod tests {
 
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 3);
+    }
+
+    #[test]
+    fn should_evaluate_nested_fresh_calls() {
+        let goal = fresh(|mut state| {
+            let _a = state.define('a');
+
+            fresh(|mut state| {
+                let a = state.define('a');
+
+                disjunction(
+                    eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+                    disjunction(
+                        eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+                        eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+                    ),
+                )
+                .apply(state)
+            })
+            .apply(state)
+        });
+
+        let stream = goal.apply(State::empty());
+        assert!(stream.len() == 3);
+
+        // should contain 2 vars for `'a'` in the first state.
+        assert_eq!(
+            stream[0].get_vars_by_key('a').map(|vars| vars.len()),
+            Some(2)
+        );
     }
 }
