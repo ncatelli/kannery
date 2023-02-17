@@ -495,6 +495,32 @@ where
     }
 }
 
+/// Creates the conjunction of two goals, flattening the state for all states
+/// that are valid in both goals. Logically similar to an `and`.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.define('a');
+///     let b = state.define('b');
+///     let c = state.define('c');
+///
+///     conjunction(
+///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+///         conjunction(
+///             eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
+///             eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
+///         ),
+///     )
+///     .apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert!(stream.len() == 1);
+/// ```
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
