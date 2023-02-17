@@ -453,6 +453,55 @@ where
     Disjunction::new(goal1, goal2)
 }
 
+pub struct Conjunction<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    _value_kind: std::marker::PhantomData<T>,
+    goal1: G1,
+    goal2: G2,
+}
+
+impl<T, G1, G2> Conjunction<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    pub fn new(goal1: G1, goal2: G2) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            goal1,
+            goal2,
+        }
+    }
+}
+
+impl<T, G1, G2> Goal<T> for Conjunction<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        let stream = self.goal1.apply(state);
+
+        stream
+            .into_iter()
+            .flat_map(|state| self.goal2.apply(state))
+            .collect::<Vec<_>>()
+    }
+}
+
+pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+{
+    Conjunction::new(goal1, goal2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -544,6 +593,27 @@ mod tests {
 
         let stream = goal.apply(State::empty());
         assert!(stream.len() == 3);
+    }
+
+    #[test]
+    fn should_evaluate_conjunction_operation() {
+        let goal = fresh(|mut state| {
+            let a = state.define('a');
+            let b = state.define('b');
+            let c = state.define('c');
+
+            conjunction(
+                eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+                conjunction(
+                    eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
+                    eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
+                ),
+            )
+            .apply(state)
+        });
+
+        let stream = goal.apply(State::empty());
+        assert!(stream.len() == 1);
     }
 
     #[test]
