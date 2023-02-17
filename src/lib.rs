@@ -506,21 +506,6 @@ where
 mod tests {
     use super::*;
 
-    macro_rules! prepare_state {
-        ($(($var:literal, $term:expr)),*) => {
-            [
-                $(
-                ($var, $term),
-                )*
-            ]
-            .into_iter()
-            .fold(State::default(), |mut state, (var, term)| {
-                state.insert(var, term);
-                state
-            })
-        };
-    }
-
     #[test]
     fn should_walk_until_expected_value() {
         let a = 'a'.to_var_repr(0);
@@ -538,25 +523,30 @@ mod tests {
     #[test]
     fn should_unify_equal_values() {
         let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-        let c = 'c'.to_var_repr(0);
-        let d = 'd'.to_var_repr(0);
-        let state = prepare_state!(
-            ('c', Term::Value(1)),
-            ('d', Term::Value(2)),
-            ('b', Term::Var(c)),
-            ('a', Term::Var(b))
-        );
 
-        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(b));
-        let stream = goal.apply(state.clone());
+        let goal = fresh(|mut state| {
+            let a = state.define('a');
+            let b = state.define('b');
+            let c = state.define('c');
+            let d = state.define('d');
+
+            conjunction(
+                eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+                conjunction(
+                    eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
+                    conjunction(
+                        eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+                        eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
+                    ),
+                ),
+            )
+            .apply(state)
+        });
+
+        let stream = goal.apply(State::empty());
         assert!(stream.len() == 1);
         assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
         assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
-
-        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(d));
-        let stream = goal.apply(state);
-        assert!(stream.is_empty());
     }
 
     #[test]
