@@ -105,6 +105,16 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
+    /// Define a tracked `Var` and insert a `Term<T>` for that given var.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::{State, Term};
+    ///
+    /// let mut state = State::<u8>::empty();
+    /// state.insert('a', Term::Value(1));
+    /// ```
     pub fn insert<VAR: VarRepresentable + std::fmt::Display>(
         &mut self,
         key: VAR,
@@ -121,7 +131,7 @@ impl<T: ValueRepresentable> State<T> {
     /// # Examples
     ///
     /// ```
-    /// use kannery::*;
+    /// use kannery::State;
     ///
     /// let mut state = State::<u8>::empty();
     /// state.define('a');
@@ -145,7 +155,7 @@ impl<T: ValueRepresentable> State<T> {
     /// # Examples
     ///
     /// ```
-    /// use kannery::*;
+    /// use kannery::State;
     ///
     /// let state = {
     ///     let mut state = State::<u8>::empty();
