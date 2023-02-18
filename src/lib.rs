@@ -109,7 +109,7 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    /// Define a tracked `Var` and insert a `Term<T>` for that given var.
+    /// Declare and define a tracked `Var` for a given `Term<T>`.
     ///
     /// # Examples
     ///
@@ -117,20 +117,20 @@ impl<T: ValueRepresentable> State<T> {
     /// use kannery::{State, Term};
     ///
     /// let mut state = State::<u8>::empty();
-    /// state.insert('a', Term::Value(1));
+    /// state.define('a', Term::Value(1));
     /// ```
-    pub fn insert<VAR: VarRepresentable + std::fmt::Display>(
+    pub fn define<VAR: VarRepresentable + std::fmt::Display>(
         &mut self,
         key: VAR,
         term: Term<T>,
     ) -> Var {
-        let var = self.define(key);
+        let var = self.declare(key);
         self.term_mapping.insert(var, term);
 
         var
     }
 
-    /// Define a tracked `Var` occurrence for a given key.
+    /// Dedeclare a tracked `Var` occurrence for a given key.
     ///
     /// # Examples
     ///
@@ -138,9 +138,9 @@ impl<T: ValueRepresentable> State<T> {
     /// use kannery::State;
     ///
     /// let mut state = State::<u8>::empty();
-    /// state.define('a');
+    /// state.declare('a');
     /// ```
-    pub fn define<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
+    pub fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -164,7 +164,7 @@ impl<T: ValueRepresentable> State<T> {
     /// let state = {
     ///     let mut state = State::<u8>::empty();
     ///     for _ in 0..5 {
-    ///         state.define('a');
+    ///         state.declare('a');
     ///     }
     ///
     ///     state
@@ -362,6 +362,27 @@ where
     }
 }
 
+/// Declares a new variable.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///
+///     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert!(stream.len() == 1);
+/// assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
+/// assert_eq!(
+///     Term::Value(1),
+///     stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
+/// );
+/// ```
 pub fn fresh<T, F>(func: F) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -446,6 +467,29 @@ where
     }
 }
 
+/// Creates the disjunction of two goals. Returning all states that are valid
+/// in either goal. Logically similar to an `or`.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///
+///     disjunction(
+///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+///         disjunction(
+///             eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+///             eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+///         ),
+///     )
+///     .apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert!(stream.len() == 3);
+/// ```
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -453,24 +497,84 @@ where
     Disjunction::new(goal1, goal2)
 }
 
+pub struct Conjunction<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    _value_kind: std::marker::PhantomData<T>,
+    goal1: G1,
+    goal2: G2,
+}
+
+impl<T, G1, G2> Conjunction<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    pub fn new(goal1: G1, goal2: G2) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            goal1,
+            goal2,
+        }
+    }
+}
+
+impl<T, G1, G2> Goal<T> for Conjunction<T, G1, G2>
+where
+    T: ValueRepresentable,
+    G1: Goal<T>,
+    G2: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        let stream = self.goal1.apply(state);
+
+        stream
+            .into_iter()
+            .flat_map(|state| self.goal2.apply(state))
+            .collect::<Vec<_>>()
+    }
+}
+
+/// Creates the conjunction of two goals, flattening the state for all states
+/// that are valid in both goals. Logically similar to an `and`.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///     let b = state.declare('b');
+///     let c = state.declare('c');
+///
+///     conjunction(
+///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
+///         conjunction(
+///             eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
+///             eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
+///         ),
+///     )
+///     .apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert!(stream.len() == 1);
+/// ```
+pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+{
+    Conjunction::new(goal1, goal2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    macro_rules! prepare_state {
-        ($(($var:literal, $term:expr)),*) => {
-            [
-                $(
-                ($var, $term),
-                )*
-            ]
-            .into_iter()
-            .fold(State::default(), |mut state, (var, term)| {
-                state.insert(var, term);
-                state
-            })
-        };
-    }
 
     #[test]
     fn should_walk_until_expected_value() {
@@ -489,70 +593,39 @@ mod tests {
     #[test]
     fn should_unify_equal_values() {
         let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-        let c = 'c'.to_var_repr(0);
-        let d = 'd'.to_var_repr(0);
-        let state = prepare_state!(
-            ('c', Term::Value(1)),
-            ('d', Term::Value(2)),
-            ('b', Term::Var(c)),
-            ('a', Term::Var(b))
-        );
 
-        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(b));
-        let stream = goal.apply(state.clone());
-        assert!(stream.len() == 1);
-        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
-        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
-
-        let goal = eq(Term::<u8>::Var(a), Term::<u8>::Var(d));
-        let stream = goal.apply(state);
-        assert!(stream.is_empty());
-    }
-
-    #[test]
-    fn should_declare_variables_via_fresh_operation() {
         let goal = fresh(|mut state| {
-            let a = state.define('a');
+            let a = state.declare('a');
+            let b = state.declare('b');
+            let c = state.declare('c');
+            let d = state.declare('d');
 
-            eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
-        });
-
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 1);
-        assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
-        assert_eq!(
-            Term::Value(1),
-            stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
-        );
-    }
-
-    #[test]
-    fn should_evaluate_disjunction_operation() {
-        let goal = fresh(|mut state| {
-            let a = state.define('a');
-
-            disjunction(
-                eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                disjunction(
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+            conjunction(
+                eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+                conjunction(
+                    eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
+                    conjunction(
+                        eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+                        eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
+                    ),
                 ),
             )
             .apply(state)
         });
 
         let stream = goal.apply(State::empty());
-        assert!(stream.len() == 3);
+        assert!(stream.len() == 1);
+        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
+        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
     }
 
     #[test]
     fn should_evaluate_nested_fresh_calls() {
         let goal = fresh(|mut state| {
-            let _a = state.define('a');
+            let _a = state.declare('a');
 
             fresh(|mut state| {
-                let a = state.define('a');
+                let a = state.declare('a');
 
                 disjunction(
                     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
