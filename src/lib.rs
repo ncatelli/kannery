@@ -236,6 +236,8 @@ impl<T: ValueRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
     }
 }
 
+/// A trait for defining the behavior of traversing (_looking up_) the term
+/// that a variable maps to.
 pub trait Walkable<T: ValueRepresentable>: Clone {
     fn walk(&self, term: &Term<T>) -> Term<T>;
 }
@@ -256,12 +258,97 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
     }
 }
 
+/// Walk the terminal mapping returning the resolved term of a given variable, or itself.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let a = 'a'.to_var_repr(0);
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///     let b = state.declare('b');
+///     let c = state.declare('c');
+///     let d = state.declare('d');
+///
+///     conjunction(
+///         eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+///         conjunction(
+///             eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
+///             conjunction(
+///                 eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+///                 eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
+///             ),
+///         ),
+///     )
+///     .apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
+/// ```
 pub fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
 where
     T: VarRepresentable,
     M: Walkable<T>,
 {
     Walkable::walk(mapping, term)
+}
+
+/// A type for defining walking against a set of states.
+pub trait DeepWalkable<T: ValueRepresentable>: Clone {
+    fn deep_walk(&self, term: &Term<T>) -> Vec<Term<T>>;
+}
+
+impl<T: VarRepresentable> DeepWalkable<T> for Stream<T> {
+    fn deep_walk(&self, term: &Term<T>) -> Vec<Term<T>> {
+        self.iter()
+            .map(|state| {
+                let mapping = state.as_ref();
+                Walkable::walk(mapping, term)
+            })
+            .collect()
+    }
+}
+
+/// Resolve a variable against a set of states, returning all possible values.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let a = 'a'.to_var_repr(0);
+///
+/// let goal = fresh(|mut state| {
+///     let a = state.declare('a');
+///     let b = state.declare('b');
+///     let c = state.declare('c');
+///     let d = state.declare('d');
+///
+///     conjunction(
+///         eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+///         conjunction(
+///             eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
+///             conjunction(
+///                 eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+///                 eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
+///             ),
+///         ),
+///     )
+///     .apply(state)
+/// });
+///
+/// let stream = goal.apply(State::empty());
+/// assert_eq!(vec![Term::Value(1)], stream.deep_walk(&Term::Var(a)));
+/// ```
+pub fn deep_walk<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
+where
+    T: VarRepresentable,
+{
+    DeepWalkable::deep_walk(stream, term)
 }
 
 pub fn unify<T: VarRepresentable>(
@@ -286,13 +373,6 @@ pub fn unify<T: VarRepresentable>(
 
 // Represents a calleable stream of states.
 pub type Stream<T> = Vec<State<T>>;
-
-pub fn mplus<T: ValueRepresentable>(stream1: Stream<T>, mut stream2: Stream<T>) -> Stream<T> {
-    let mut stream = stream1;
-    stream.append(&mut stream2);
-
-    stream
-}
 
 pub trait Goal<T: ValueRepresentable> {
     fn apply(&self, state: State<T>) -> Stream<T>;
@@ -460,10 +540,12 @@ where
     G2: Goal<T>,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        let stream1 = self.goal1.apply(state.clone());
-        let stream2 = self.goal2.apply(state);
+        let mut stream_head = self.goal1.apply(state.clone());
+        let mut stream_tail = self.goal2.apply(state);
 
-        mplus(stream1, stream2)
+        stream_head.append(&mut stream_tail);
+
+        stream_head
     }
 }
 
