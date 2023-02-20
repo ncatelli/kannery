@@ -57,6 +57,8 @@ impl Var {
 pub enum Term<T: ValueRepresentable> {
     Var(Var),
     Value(T),
+    // In place of a traditional cons list.
+    Cons(Vec<Term<T>>),
 }
 
 impl<T: ValueRepresentable> Term<T> {
@@ -68,6 +70,11 @@ impl<T: ValueRepresentable> Term<T> {
     /// Returns a boolean signifying if the type is a `Value` variant.
     pub fn is_value(&self) -> bool {
         matches!(self, Term::Value(_))
+    }
+
+    /// Returns a boolean signifying if the type is a `Cons` variant.
+    pub fn is_cons(&self) -> bool {
+        matches!(self, Term::Cons(_))
     }
 }
 
@@ -225,6 +232,12 @@ impl<T: ValueRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
 
                 // key can be resolved and term is a value.
                 (Some(repr), Some(t @ Term::Value(_))) => dm.entry(repr, t),
+
+                // key cannot be resolved and its value is a cons list.
+                (None, Some(t @ Term::Cons(_))) => dm.entry(k, t),
+
+                // key can be resolved and its term is a cons list.
+                (Some(repr), Some(t @ Term::Cons(_))) => dm.entry(repr, t),
 
                 // by nature of the k being pulled from the map, this state
                 // should be unreachable and should panic if it is ever reached.
@@ -729,5 +742,34 @@ mod tests {
             stream[0].get_vars_by_key('a').map(|vars| vars.len()),
             Some(2)
         );
+    }
+
+    #[test]
+    #[ignore = "not yet implemented"]
+    fn should_return_multiple_relations() {
+        let goal = fresh(|mut state| {
+            let homer = state.declare("Homer");
+
+            // children
+            let bart = state.declare("Bart");
+            let lisa = state.declare("Lisa");
+
+            conjunction(
+                eq(Term::Var(homer), Term::Var(bart)),
+                conjunction(
+                    eq(Term::Var(homer), Term::Var(lisa)),
+                    conjunction(
+                        fresh(move |state| eq(Term::Var(bart), Term::Value("Bart")).apply(state)),
+                        fresh(move |state| eq(Term::Var(lisa), Term::Value("Lisa")).apply(state)),
+                    ),
+                ),
+            )
+            .apply(state)
+        });
+
+        let stream = goal.apply(State::<&'static str>::empty());
+
+        let res = stream.deep_walk(&Term::Var("Homer".to_var_repr(0)));
+        assert_eq!(res.len(), 2)
     }
 }
