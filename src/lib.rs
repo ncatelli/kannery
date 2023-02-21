@@ -761,6 +761,7 @@ mod tests {
     fn should_return_multiple_relations() {
         let goal = fresh(|mut state| {
             let homer = state.declare("Homer");
+            let marge = state.declare("Marge");
 
             // children
             let bart = state.declare("Bart");
@@ -770,9 +771,15 @@ mod tests {
                 eq(Term::Var(homer), Term::Var(bart)),
                 conjunction(
                     eq(Term::Var(homer), Term::Var(lisa)),
-                    disjunction(
-                        fresh(move |state| eq(Term::Var(bart), Term::Value("Bart")).apply(state)),
-                        fresh(move |state| eq(Term::Var(lisa), Term::Value("Lisa")).apply(state)),
+                    conjunction(
+                        eq(Term::Var(marge), Term::Var(bart)),
+                        conjunction(
+                            eq(Term::Var(marge), Term::Var(lisa)),
+                            disjunction(
+                                eq(Term::Var(bart), Term::Value("Bart")),
+                                eq(Term::Var(lisa), Term::Value("Lisa")),
+                            ),
+                        ),
                     ),
                 ),
             )
@@ -780,9 +787,22 @@ mod tests {
         });
 
         let stream = goal.apply(State::<&'static str>::empty());
-
         let res = stream.deep_walk(&Term::Var("Homer".to_var_repr(0)));
+        assert_eq!(res.len(), 2);
 
-        assert_eq!(res.len(), 2)
+        let sorted_values = {
+            let mut values: Vec<_> = res
+                .into_iter()
+                .flat_map(|term| match term {
+                    Term::Value(val) => Some(val),
+                    _ => None,
+                })
+                .collect();
+
+            values.sort();
+            values
+        };
+
+        assert_eq!(["Bart", "Lisa"].as_slice(), &sorted_values);
     }
 }
