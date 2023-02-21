@@ -758,7 +758,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn should_return_multiple_relations() {
         let goal = fresh(|mut state| {
             let homer = state.declare("Homer");
@@ -771,7 +770,7 @@ mod tests {
                 eq(Term::Var(homer), Term::Var(bart)),
                 conjunction(
                     eq(Term::Var(homer), Term::Var(lisa)),
-                    conjunction(
+                    disjunction(
                         fresh(move |state| eq(Term::Var(bart), Term::Value("Bart")).apply(state)),
                         fresh(move |state| eq(Term::Var(lisa), Term::Value("Lisa")).apply(state)),
                     ),
@@ -783,6 +782,7 @@ mod tests {
         let stream = goal.apply(State::<&'static str>::empty());
 
         let res = stream.deep_walk(&Term::Var("Homer".to_var_repr(0)));
+
         assert_eq!(res.len(), 2)
     }
 }
