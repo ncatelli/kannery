@@ -58,7 +58,7 @@ pub enum Term<T: ValueRepresentable> {
     Var(Var),
     Value(T),
     // In place of a traditional cons list.
-    Cons(Vec<Term<T>>),
+    Cons(Box<Term<T>>, Box<Term<T>>),
 }
 
 impl<T: ValueRepresentable> Term<T> {
@@ -74,8 +74,19 @@ impl<T: ValueRepresentable> Term<T> {
 
     /// Returns a boolean signifying if the type is a `Cons` variant.
     pub fn is_cons(&self) -> bool {
-        matches!(self, Term::Cons(_))
+        matches!(self, Term::Cons(_, _))
     }
+}
+
+impl<T: ValueRepresentable> From<(Term<T>, Term<T>)> for Term<T> {
+    fn from((head, tail): (Term<T>, Term<T>)) -> Self {
+        cons(head, tail)
+    }
+}
+
+/// Generate a cons list from a given head/tail value.
+pub fn cons<T: ValueRepresentable>(head: Term<T>, tail: Term<T>) -> Term<T> {
+    Term::Cons(Box::new(head), Box::new(tail))
 }
 
 /// A map representing potentially recursive Variable to Terminal mappings.
@@ -234,10 +245,10 @@ impl<T: ValueRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
                 (Some(repr), Some(t @ Term::Value(_))) => dm.entry(repr, t),
 
                 // key cannot be resolved and its value is a cons list.
-                (None, Some(t @ Term::Cons(_))) => dm.entry(k, t),
+                (None, Some(t @ Term::Cons(_, _))) => dm.entry(k, t),
 
                 // key can be resolved and its term is a cons list.
-                (Some(repr), Some(t @ Term::Cons(_))) => dm.entry(repr, t),
+                (Some(repr), Some(t @ Term::Cons(_, _))) => dm.entry(repr, t),
 
                 // by nature of the k being pulled from the map, this state
                 // should be unreachable and should panic if it is ever reached.
@@ -380,6 +391,8 @@ pub fn unify<T: VarRepresentable>(
             Some(mapping)
         }
         (Term::Value(v1), Term::Value(v2)) if v1 == v2 => Some(mapping),
+        (Term::Cons(lh, lt), Term::Cons(rh, rt)) => unify(&mapping, lh.as_ref(), rh.as_ref())
+            .and_then(|mapping| unify(&mapping, lt.as_ref(), rt.as_ref())),
         _ => None,
     }
 }
