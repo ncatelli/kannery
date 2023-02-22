@@ -57,6 +57,8 @@ impl Var {
 pub enum Term<T: ValueRepresentable> {
     Var(Var),
     Value(T),
+    // In place of a traditional cons list.
+    Cons(Box<Term<T>>, Box<Term<T>>),
 }
 
 impl<T: ValueRepresentable> Term<T> {
@@ -69,6 +71,22 @@ impl<T: ValueRepresentable> Term<T> {
     pub fn is_value(&self) -> bool {
         matches!(self, Term::Value(_))
     }
+
+    /// Returns a boolean signifying if the type is a `Cons` variant.
+    pub fn is_cons(&self) -> bool {
+        matches!(self, Term::Cons(_, _))
+    }
+}
+
+impl<T: ValueRepresentable> From<(Term<T>, Term<T>)> for Term<T> {
+    fn from((head, tail): (Term<T>, Term<T>)) -> Self {
+        cons(head, tail)
+    }
+}
+
+/// Generate a cons list from a given head/tail value.
+pub fn cons<T: ValueRepresentable>(head: Term<T>, tail: Term<T>) -> Term<T> {
+    Term::Cons(Box::new(head), Box::new(tail))
 }
 
 /// A map representing potentially recursive Variable to Terminal mappings.
@@ -109,38 +127,8 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    /// Declare and define a tracked `Var` for a given `Term<T>`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use kannery::{State, Term};
-    ///
-    /// let mut state = State::<u8>::empty();
-    /// state.define('a', Term::Value(1));
-    /// ```
-    pub fn define<VAR: VarRepresentable + std::fmt::Display>(
-        &mut self,
-        key: VAR,
-        term: Term<T>,
-    ) -> Var {
-        let var = self.declare(key);
-        self.term_mapping.insert(var, term);
-
-        var
-    }
-
     /// Dedeclare a tracked `Var` occurrence for a given key.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use kannery::State;
-    ///
-    /// let mut state = State::<u8>::empty();
-    /// state.declare('a');
-    /// ```
-    pub fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
+    fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -152,41 +140,6 @@ impl<T: ValueRepresentable> State<T> {
         self.repr_mapping.entry(var).or_insert(repr);
 
         var
-    }
-
-    /// Retrieves all occurrences, ordered by their occurrence of a given key.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use kannery::State;
-    ///
-    /// let state = {
-    ///     let mut state = State::<u8>::empty();
-    ///     for _ in 0..5 {
-    ///         state.declare('a');
-    ///     }
-    ///
-    ///     state
-    /// };
-    ///
-    /// let vars = state.get_vars_by_key('a');
-    /// assert!(vars.is_some());
-    /// assert_eq!(vars.map(|v| v.len()), Some(5));
-    /// ```
-    pub fn get_vars_by_key<VAR: VarRepresentable + std::fmt::Display>(
-        &self,
-        key: VAR,
-    ) -> Option<Vec<Var>> {
-        let repr = key.to_string();
-        let count = self.occurence_counter.get(&repr).copied()?;
-
-        let vars = (0..count)
-            .into_iter()
-            .map(|count| key.to_var_repr(count))
-            .collect();
-
-        Some(vars)
     }
 }
 
@@ -226,6 +179,12 @@ impl<T: ValueRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
                 // key can be resolved and term is a value.
                 (Some(repr), Some(t @ Term::Value(_))) => dm.entry(repr, t),
 
+                // key cannot be resolved and its value is a cons list.
+                (None, Some(t @ Term::Cons(_, _))) => dm.entry(k, t),
+
+                // key can be resolved and its term is a cons list.
+                (Some(repr), Some(t @ Term::Cons(_, _))) => dm.entry(repr, t),
+
                 // by nature of the k being pulled from the map, this state
                 // should be unreachable and should panic if it is ever reached.
                 (_, None) => unreachable!(),
@@ -262,33 +221,6 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
 ///
 /// # Examples
 ///
-/// ```
-/// use kannery::*;
-///
-/// let a = 'a'.to_var_repr(0);
-///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///     let b = state.declare('b');
-///     let c = state.declare('c');
-///     let d = state.declare('d');
-///
-///     conjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
-///         conjunction(
-///             eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
-///             conjunction(
-///                 eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
-///                 eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
-///             ),
-///         ),
-///     )
-///     .apply(state)
-/// });
-///
-/// let stream = goal.apply(State::empty());
-/// assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
-/// ```
 pub fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
 where
     T: VarRepresentable,
@@ -299,15 +231,36 @@ where
 
 /// A type for defining walking against a set of states.
 pub trait DeepWalkable<T: ValueRepresentable>: Clone {
-    fn deep_walk(&self, term: &Term<T>) -> Vec<Term<T>>;
+    fn deep_walk(&self, term: &Term<T>) -> Term<T>;
 }
 
-impl<T: VarRepresentable> DeepWalkable<T> for Stream<T> {
-    fn deep_walk(&self, term: &Term<T>) -> Vec<Term<T>> {
+impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
+    fn deep_walk(&self, term: &Term<T>) -> Term<T> {
+        let term = self.walk(term);
+
+        if let Term::Cons(head, tail) = term {
+            let head_ref = self.walk(head.as_ref());
+            let tail_ref = self.walk(tail.as_ref());
+            Term::Cons(Box::new(head_ref), Box::new(tail_ref))
+        } else {
+            term
+        }
+    }
+}
+
+pub trait Runnable<T: ValueRepresentable>: Clone {
+    fn run(&self, term: &Term<T>) -> Vec<Term<T>>;
+}
+
+impl<T> Runnable<T> for Stream<T>
+where
+    T: VarRepresentable,
+{
+    fn run(&self, term: &Term<T>) -> Vec<Term<T>> {
         self.iter()
             .map(|state| {
                 let mapping = state.as_ref();
-                Walkable::walk(mapping, term)
+                DeepWalkable::deep_walk(mapping, term)
             })
             .collect()
     }
@@ -317,41 +270,14 @@ impl<T: VarRepresentable> DeepWalkable<T> for Stream<T> {
 ///
 /// # Examples
 ///
-/// ```
-/// use kannery::*;
-///
-/// let a = 'a'.to_var_repr(0);
-///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///     let b = state.declare('b');
-///     let c = state.declare('c');
-///     let d = state.declare('d');
-///
-///     conjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
-///         conjunction(
-///             eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
-///             conjunction(
-///                 eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
-///                 eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
-///             ),
-///         ),
-///     )
-///     .apply(state)
-/// });
-///
-/// let stream = goal.apply(State::empty());
-/// assert_eq!(vec![Term::Value(1)], stream.deep_walk(&Term::Var(a)));
-/// ```
-pub fn deep_walk<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
+pub fn run<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
 where
     T: VarRepresentable,
 {
-    DeepWalkable::deep_walk(stream, term)
+    Runnable::run(stream, term)
 }
 
-pub fn unify<T: VarRepresentable>(
+fn unify<T: VarRepresentable>(
     mapping: &TermMapping<T>,
     term1: &Term<T>,
     term2: &Term<T>,
@@ -366,7 +292,9 @@ pub fn unify<T: VarRepresentable>(
             mapping.insert(v, t);
             Some(mapping)
         }
-        (Term::Value(v1), Term::Value(v2)) if v1 == v2 => Some(mapping),
+        (Term::Cons(lh, lt), Term::Cons(rh, rt)) => unify(&mapping, lh.as_ref(), rh.as_ref())
+            .and_then(|mapping| unify(&mapping, lt.as_ref(), rt.as_ref())),
+        (t1, t2) if t1 == t2 => Some(mapping),
         _ => None,
     }
 }
@@ -410,65 +338,54 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct Fresh<T, F>
+pub struct Fresh<T, V, F, GO>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
+    GO: Goal<T>,
+    V: VarRepresentable,
+    F: Fn(Var) -> GO,
 {
     _value_kind: std::marker::PhantomData<T>,
+    var: V,
     func: F,
 }
 
-impl<T, F> Fresh<T, F>
+impl<T, V, F, GO> Fresh<T, V, F, GO>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
+    V: VarRepresentable,
+    GO: Goal<T>,
+    F: Fn(Var) -> GO,
 {
-    pub fn new(func: F) -> Self {
+    pub fn new(var_id: V, func: F) -> Self {
         Self {
             _value_kind: std::marker::PhantomData,
+            var: var_id,
             func,
         }
     }
 }
 
-impl<T, F> Goal<T> for Fresh<T, F>
+impl<T, V, F, GO> Goal<T> for Fresh<T, V, F, GO>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
+    V: VarRepresentable + std::fmt::Display,
+    GO: Goal<T>,
+    F: Fn(Var) -> GO,
 {
-    fn apply(&self, state: State<T>) -> Stream<T> {
-        (self.func).apply(state)
+    fn apply(&self, mut state: State<T>) -> Stream<T> {
+        let var = state.declare(self.var.clone());
+        (self.func)(var).apply(state)
     }
 }
 
-/// Declares a new variable.
-///
-/// # Examples
-///
-/// ```
-/// use kannery::*;
-///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///
-///     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
-/// });
-///
-/// let stream = goal.apply(State::empty());
-/// assert!(stream.len() == 1);
-/// assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
-/// assert_eq!(
-///     Term::Value(1),
-///     stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
-/// );
-/// ```
-pub fn fresh<T, F>(func: F) -> impl Goal<T>
+pub fn fresh<T, V, GO>(var: V, func: impl Fn(Var) -> GO) -> impl Goal<T>
 where
     T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
+    V: VarRepresentable + std::fmt::Display,
+    GO: Goal<T>,
 {
-    Fresh::new(func)
+    Fresh::new(var, func)
 }
 
 #[derive(Debug)]
@@ -485,17 +402,22 @@ impl<T: ValueRepresentable> Equal<T> {
 
 impl<T: VarRepresentable> Goal<T> for Equal<T> {
     fn apply(&self, state: State<T>) -> Stream<T> {
+        let term1 = &self.term1;
+        let term2 = &self.term2;
+
         let sub_mapping = state.as_ref();
-        let unified_mapping = unify(sub_mapping, &self.term1, &self.term2);
+        let unified_mapping = unify(sub_mapping, term1, term2);
 
         // Return an empty stream if the mapping is `None`.
-        unified_mapping.map_or_else(Stream::new, |term_mapping| {
+        if let Some(term_mapping) = unified_mapping {
             vec![State::new(
                 state.occurence_counter,
                 term_mapping,
                 state.repr_mapping,
             )]
-        })
+        } else {
+            Stream::new()
+        }
     }
 }
 
@@ -553,25 +475,7 @@ where
 /// in either goal. Logically similar to an `or`.
 ///
 /// # Examples
-/// ```
-/// use kannery::*;
 ///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///
-///     disjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-///         disjunction(
-///             eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
-///             eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
-///         ),
-///     )
-///     .apply(state)
-/// });
-///
-/// let stream = goal.apply(State::empty());
-/// assert!(stream.len() == 3);
-/// ```
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -626,27 +530,6 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// use kannery::*;
-///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///     let b = state.declare('b');
-///     let c = state.declare('c');
-///
-///     conjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-///         conjunction(
-///             eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
-///             eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
-///         ),
-///     )
-///     .apply(state)
-/// });
-///
-/// let stream = goal.apply(State::empty());
-/// assert!(stream.len() == 1);
-/// ```
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -659,75 +542,88 @@ mod tests {
     use super::*;
 
     #[test]
-    fn should_walk_until_expected_value() {
-        let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-
-        let mapping: TermMapping<u8> = [(a, Term::Var(b)), (b, Term::Value(2))]
-            .into_iter()
-            .collect();
-
-        // assert both values reify to the value of 2
-        assert_eq!(walk(&mapping, &Term::Var(a)), Term::Value(2));
-        assert_eq!(walk(&mapping, &Term::Var(b)), Term::Value(2));
-    }
-
-    #[test]
-    fn should_unify_equal_values() {
-        let a = 'a'.to_var_repr(0);
-
-        let goal = fresh(|mut state| {
-            let a = state.declare('a');
-            let b = state.declare('b');
-            let c = state.declare('c');
-            let d = state.declare('d');
-
-            conjunction(
-                eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
-                conjunction(
-                    eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
-                    conjunction(
-                        eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
-                        eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
+    fn should_return_multiple_relations() {
+        let parent_fn = |parent: Term<_>, child: Term<_>| {
+            disjunction(
+                eq(
+                    Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
+                    Term::Cons(
+                        Box::new(Term::Value("Homer")),
+                        Box::new(Term::Value("Bart")),
+                    ),
+                ),
+                disjunction(
+                    eq(
+                        Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
+                        Term::Cons(
+                            Box::new(Term::Value("Homer")),
+                            Box::new(Term::Value("Lisa")),
+                        ),
+                    ),
+                    disjunction(
+                        eq(
+                            Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
+                            Term::Cons(
+                                Box::new(Term::Value("Marge")),
+                                Box::new(Term::Value("Bart")),
+                            ),
+                        ),
+                        disjunction(
+                            eq(
+                                Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
+                                Term::Cons(
+                                    Box::new(Term::Value("Marge")),
+                                    Box::new(Term::Value("Lisa")),
+                                ),
+                            ),
+                            disjunction(
+                                eq(
+                                    Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
+                                    Term::Cons(
+                                        Box::new(Term::Value("Abe")),
+                                        Box::new(Term::Value("Homer")),
+                                    ),
+                                ),
+                                eq(
+                                    Term::Cons(Box::new(parent), Box::new(child)),
+                                    Term::Cons(
+                                        Box::new(Term::Value("Jackie")),
+                                        Box::new(Term::Value("Marge")),
+                                    ),
+                                ),
+                            ),
+                        ),
                     ),
                 ),
             )
-            .apply(state)
-        });
+        };
 
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 1);
-        assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
-        assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
-    }
-
-    #[test]
-    fn should_evaluate_nested_fresh_calls() {
-        let goal = fresh(|mut state| {
-            let _a = state.declare('a');
-
-            fresh(|mut state| {
-                let a = state.declare('a');
-
-                disjunction(
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                    disjunction(
-                        eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
-                        eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
-                    ),
-                )
-                .apply(state)
+        let children_of_homer = || {
+            fresh("child", move |child| {
+                parent_fn(Term::Value("Homer"), Term::Var(child))
             })
-            .apply(state)
-        });
+        };
+        let stream = children_of_homer().apply(State::empty());
+        let child_var = "child".to_var_repr(0);
+        let res = stream.run(&Term::Var(child_var));
 
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 3);
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_children = {
+            let mut children = res
+                .into_iter()
+                .flat_map(|term| match term {
+                    Term::Value(val) => Some(val.to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
 
-        // should contain 2 vars for `'a'` in the first state.
+            children.sort();
+            children
+        };
+
         assert_eq!(
-            stream[0].get_vars_by_key('a').map(|vars| vars.len()),
-            Some(2)
+            ["Bart".to_string(), "Lisa".to_string()].as_slice(),
+            sorted_children.as_slice()
         );
     }
 }
