@@ -298,28 +298,24 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
 /// ```
 /// use kannery::*;
 ///
-/// let a = 'a'.to_var_repr(0);
+/// let mut state = State::<u8>::empty();
+/// let a = state.declare('a');
+/// let b = state.declare('b');
+/// let c = state.declare('c');
+/// let d = state.declare('d');
 ///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///     let b = state.declare('b');
-///     let c = state.declare('c');
-///     let d = state.declare('d');
-///
+/// let goal = conjunction(
+///     eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
 ///     conjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+///         eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
 ///         conjunction(
-///             eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
-///             conjunction(
-///                 eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
-///                 eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
-///             ),
+///             eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+///             eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
 ///         ),
-///     )
-///     .apply(state)
-/// });
+///     ),
+/// );
 ///
-/// let stream = goal.apply(State::empty());
+/// let stream = goal.apply(state);
 /// assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
 /// ```
 pub fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
@@ -353,28 +349,23 @@ impl<T: VarRepresentable> DeepWalkable<T> for Stream<T> {
 /// ```
 /// use kannery::*;
 ///
-/// let a = 'a'.to_var_repr(0);
-///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///     let b = state.declare('b');
-///     let c = state.declare('c');
-///     let d = state.declare('d');
-///
+/// let mut state = State::<u8>::empty();
+/// let a = state.declare('a');
+/// let b = state.declare('b');
+/// let c = state.declare('c');
+/// let d = state.declare('d');
+/// let goal = conjunction(
+///     eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
 ///     conjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+///         eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
 ///         conjunction(
-///             eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
-///             conjunction(
-///                 eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
-///                 eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
-///             ),
+///             eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+///             eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
 ///         ),
-///     )
-///     .apply(state)
-/// });
+///     ),
+///  );
 ///
-/// let stream = goal.apply(State::empty());
+/// let stream = goal.apply(state);
 /// assert_eq!(vec![Term::Value(1)], stream.deep_walk(&Term::Var(a)));
 /// ```
 pub fn deep_walk<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
@@ -384,7 +375,7 @@ where
     DeepWalkable::deep_walk(stream, term)
 }
 
-pub fn unify<T: VarRepresentable>(
+fn unify<T: VarRepresentable>(
     mapping: &TermMapping<T>,
     term1: &Term<T>,
     term2: &Term<T>,
@@ -442,68 +433,6 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
     fn apply(&self, state: State<T>) -> Stream<T> {
         self.goal.apply(state)
     }
-}
-
-#[derive(Debug)]
-pub struct Fresh<T, F>
-where
-    T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
-{
-    _value_kind: std::marker::PhantomData<T>,
-    func: F,
-}
-
-impl<T, F> Fresh<T, F>
-where
-    T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
-{
-    pub fn new(func: F) -> Self {
-        Self {
-            _value_kind: std::marker::PhantomData,
-            func,
-        }
-    }
-}
-
-impl<T, F> Goal<T> for Fresh<T, F>
-where
-    T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
-{
-    fn apply(&self, state: State<T>) -> Stream<T> {
-        (self.func).apply(state)
-    }
-}
-
-/// Declares a new variable.
-///
-/// # Examples
-///
-/// ```
-/// use kannery::*;
-///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///
-///     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)).apply(state)
-/// });
-///
-/// let stream = goal.apply(State::empty());
-/// assert!(stream.len() == 1);
-/// assert_eq!(1, stream[0].as_ref().len(), "{:?}", stream[0]);
-/// assert_eq!(
-///     Term::Value(1),
-///     stream[0].as_ref().walk(&Term::Var('a'.to_var_repr(0)))
-/// );
-/// ```
-pub fn fresh<T, F>(func: F) -> impl Goal<T>
-where
-    T: ValueRepresentable,
-    F: Fn(State<T>) -> Stream<T>,
-{
-    Fresh::new(func)
 }
 
 #[derive(Debug)]
@@ -591,20 +520,18 @@ where
 /// ```
 /// use kannery::*;
 ///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
+/// let mut state = State::empty();
+/// let a = state.declare('a');
 ///
+/// let goal = disjunction(
+///     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
 ///     disjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-///         disjunction(
-///             eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
-///             eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
-///         ),
-///     )
-///     .apply(state)
-/// });
+///         eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
+///         eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
+///     ),
+/// );
 ///
-/// let stream = goal.apply(State::empty());
+/// let stream = goal.apply(state);
 /// assert!(stream.len() == 3);
 /// ```
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
@@ -664,22 +591,20 @@ where
 /// ```
 /// use kannery::*;
 ///
-/// let goal = fresh(|mut state| {
-///     let a = state.declare('a');
-///     let b = state.declare('b');
-///     let c = state.declare('c');
+/// let mut state = State::empty();
+/// let a = state.declare('a');
+/// let b = state.declare('b');
+/// let c = state.declare('c');
 ///
+/// let goal = conjunction(
+///     eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
 ///     conjunction(
-///         eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-///         conjunction(
-///             eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
-///             eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
-///         ),
-///     )
-///     .apply(state)
-/// });
+///         eq(Term::<u8>::Var(b), Term::<u8>::Value(2)),
+///         eq(Term::<u8>::Var(c), Term::<u8>::Value(3)),
+///     ),
+/// );
 ///
-/// let stream = goal.apply(State::empty());
+/// let stream = goal.apply(state);
 /// assert!(stream.len() == 1);
 /// ```
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
@@ -695,87 +620,58 @@ mod tests {
 
     #[test]
     fn should_unify_equal_values() {
-        let a = 'a'.to_var_repr(0);
+        let mut state = State::empty();
+        let a = state.declare('a');
+        let b = state.declare('c');
+        let c = state.declare('b');
+        let d = state.declare('d');
 
-        let goal = fresh(|mut state| {
-            let a = state.declare('a');
-            let b = state.declare('b');
-            let c = state.declare('c');
-            let d = state.declare('d');
-
+        let goal = conjunction(
+            eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
             conjunction(
-                eq(Term::<u8>::Var(a), Term::<u8>::Var(b)),
+                eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
                 conjunction(
-                    eq(Term::<u8>::Var(b), Term::<u8>::Var(c)),
-                    conjunction(
-                        eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
-                        eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
-                    ),
+                    eq(Term::<u8>::Var(c), Term::<u8>::Value(1)),
+                    eq(Term::<u8>::Var(d), Term::<u8>::Value(2)),
                 ),
-            )
-            .apply(state)
-        });
+            ),
+        );
 
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 1);
+        let stream = goal.apply(state);
+        assert_eq!(stream.len(), 1);
         assert_eq!(4, stream[0].as_ref().len(), "{:?}", stream[0]);
         assert_eq!(Term::Value(1), stream[0].as_ref().walk(&Term::Var(a)));
     }
 
     #[test]
-    fn should_evaluate_nested_fresh_calls() {
-        let goal = fresh(|mut state| {
-            let _a = state.declare('a');
-
-            fresh(|mut state| {
-                let a = state.declare('a');
-
-                disjunction(
-                    eq(Term::<u8>::Var(a), Term::<u8>::Value(1)),
-                    disjunction(
-                        eq(Term::<u8>::Var(a), Term::<u8>::Value(2)),
-                        eq(Term::<u8>::Var(a), Term::<u8>::Value(3)),
-                    ),
-                )
-                .apply(state)
-            })
-            .apply(state)
-        });
-
-        let stream = goal.apply(State::empty());
-        assert!(stream.len() == 3);
-
-        // should contain 2 vars for `'a'` in the first state.
-        assert_eq!(
-            stream[0].get_vars_by_key('a').map(|vars| vars.len()),
-            Some(2)
-        );
-    }
-
-    #[test]
     #[ignore = "unimplemented"]
     fn should_return_multiple_relations() {
-        let parent_var = "parent";
-        let child_var = "child";
+        let mut state = State::empty();
+        let parent = state.declare("parent");
+        let child = state.declare("child");
 
-        let goal = fresh(|mut state| {
-            let parent = state.declare(parent_var);
-            let child = state.declare(child_var);
-
+        let goal = disjunction(
+            eq(
+                Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                Term::Cons(
+                    Box::new(Term::Value("Homer")),
+                    Box::new(Term::Value("Bart")),
+                ),
+            ),
             disjunction(
                 eq(
                     Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
                     Term::Cons(
                         Box::new(Term::Value("Homer")),
-                        Box::new(Term::Value("Bart")),
+                        Box::new(Term::Value("Lisa")),
                     ),
                 ),
                 disjunction(
                     eq(
                         Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
                         Term::Cons(
-                            Box::new(Term::Value("Homer")),
-                            Box::new(Term::Value("Lisa")),
+                            Box::new(Term::Value("Marge")),
+                            Box::new(Term::Value("Bart")),
                         ),
                     ),
                     disjunction(
@@ -783,51 +679,35 @@ mod tests {
                             Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
                             Term::Cons(
                                 Box::new(Term::Value("Marge")),
-                                Box::new(Term::Value("Bart")),
+                                Box::new(Term::Value("Lisa")),
                             ),
                         ),
                         disjunction(
                             eq(
                                 Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
                                 Term::Cons(
-                                    Box::new(Term::Value("Marge")),
-                                    Box::new(Term::Value("Lisa")),
+                                    Box::new(Term::Value("Abe")),
+                                    Box::new(Term::Value("Homer")),
                                 ),
                             ),
-                            disjunction(
-                                eq(
-                                    Term::Cons(
-                                        Box::new(Term::Var(parent)),
-                                        Box::new(Term::Var(child)),
-                                    ),
-                                    Term::Cons(
-                                        Box::new(Term::Value("Abe")),
-                                        Box::new(Term::Value("Homer")),
-                                    ),
-                                ),
-                                eq(
-                                    Term::Cons(
-                                        Box::new(Term::Var(parent)),
-                                        Box::new(Term::Var(child)),
-                                    ),
-                                    Term::Cons(
-                                        Box::new(Term::Value("Jackie")),
-                                        Box::new(Term::Value("Marge")),
-                                    ),
+                            eq(
+                                Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                                Term::Cons(
+                                    Box::new(Term::Value("Jackie")),
+                                    Box::new(Term::Value("Marge")),
                                 ),
                             ),
                         ),
                     ),
                 ),
-            )
-            .apply(state)
-        });
+            ),
+        );
 
-        let stream = goal.apply(State::empty());
+        let stream = goal.apply(state);
 
         let res = stream.deep_walk(&Term::Cons(
             Box::new(Term::Value("Homer")),
-            Box::new(Term::Var(child_var.to_var_repr(0))),
+            Box::new(Term::Var(child)),
         ));
         assert_eq!(res.len(), 2, "{:#?}", res);
         println!("{:?}", res)
