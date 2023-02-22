@@ -597,6 +597,19 @@ mod tests {
             )
         };
 
+        let sorted_value_strings = |res: Vec<Term<&str>>| {
+            let mut elements = res
+                .into_iter()
+                .flat_map(|term| match term {
+                    Term::Value(val) => Some(val.to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            elements.sort();
+            elements
+        };
+
         let children_of_homer = || {
             fresh("child", move |child| {
                 parent_fn(value!("Homer"), var!(child))
@@ -607,22 +620,28 @@ mod tests {
         let res = stream.run(&Term::Var(child_var));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
-        let sorted_children = {
-            let mut children = res
-                .into_iter()
-                .flat_map(|term| match term {
-                    Term::Value(val) => Some(val.to_string()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-
-            children.sort();
-            children
-        };
-
+        let sorted_children = sorted_value_strings(res);
         assert_eq!(
             ["Bart".to_string(), "Lisa".to_string()].as_slice(),
             sorted_children.as_slice()
+        );
+
+        // map parent relationship
+        let parents_of_lisa = || {
+            fresh("parent", move |parent| {
+                parent_fn(var!(parent), value!("Lisa"))
+            })
+        };
+        let stream = parents_of_lisa().apply(State::empty());
+        let parent_var = "parent".to_var_repr(0);
+        let res = stream.run(&Term::Var(parent_var));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_parents = sorted_value_strings(res);
+
+        assert_eq!(
+            ["Homer".to_string(), "Marge".to_string()].as_slice(),
+            sorted_parents.as_slice()
         );
     }
 }
