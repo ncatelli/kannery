@@ -327,9 +327,9 @@ impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
         let term = self.walk(term);
 
         if let Term::Cons(head, tail) = term {
-            let head = self.walk(head.as_ref());
-            let tail = self.walk(tail.as_ref());
-            Term::Cons(Box::new(head), Box::new(tail))
+            let head_ref = self.walk(head.as_ref());
+            let tail_ref = self.walk(tail.as_ref());
+            Term::Cons(Box::new(head_ref), Box::new(tail_ref))
         } else {
             term
         }
