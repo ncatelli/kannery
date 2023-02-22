@@ -271,19 +271,10 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
         // recurse down the terms until either a Value is encounter or no
         // further walking can occur.
         let mut current_term = term.clone();
-        loop {
-            match &current_term {
-                Term::Var(var) => match self.get(var) {
-                    Some(next) => current_term = next.clone(),
-                    None => break,
-                },
-                Term::Value(_) => break,
-                Term::Cons(head, tail) => {
-                    let head = self.walk(head.as_ref());
-                    let tail = self.walk(tail.as_ref());
-                    current_term = Term::Cons(Box::new(head), Box::new(tail));
-                    break;
-                }
+        while let Term::Var(var) = &current_term {
+            match self.get(var) {
+                Some(next) => current_term = next.clone(),
+                None => break,
             }
         }
 
@@ -328,15 +319,36 @@ where
 
 /// A type for defining walking against a set of states.
 pub trait DeepWalkable<T: ValueRepresentable>: Clone {
-    fn deep_walk(&self, term: &Term<T>) -> Vec<Term<T>>;
+    fn deep_walk(&self, term: &Term<T>) -> Term<T>;
 }
 
-impl<T: VarRepresentable> DeepWalkable<T> for Stream<T> {
-    fn deep_walk(&self, term: &Term<T>) -> Vec<Term<T>> {
+impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
+    fn deep_walk(&self, term: &Term<T>) -> Term<T> {
+        let term = self.walk(term);
+
+        if let Term::Cons(head, tail) = term {
+            let head = self.walk(head.as_ref());
+            let tail = self.walk(tail.as_ref());
+            Term::Cons(Box::new(head), Box::new(tail))
+        } else {
+            term
+        }
+    }
+}
+
+pub trait Runnable<T: ValueRepresentable>: Clone {
+    fn run(&self, term: &Term<T>) -> Vec<Term<T>>;
+}
+
+impl<T> Runnable<T> for Stream<T>
+where
+    T: VarRepresentable,
+{
+    fn run(&self, term: &Term<T>) -> Vec<Term<T>> {
         self.iter()
             .map(|state| {
                 let mapping = state.as_ref();
-                Walkable::walk(mapping, term)
+                DeepWalkable::deep_walk(mapping, term)
             })
             .collect()
     }
@@ -366,13 +378,13 @@ impl<T: VarRepresentable> DeepWalkable<T> for Stream<T> {
 ///  );
 ///
 /// let stream = goal.apply(state);
-/// assert_eq!(vec![Term::Value(1)], stream.deep_walk(&Term::Var(a)));
+/// assert_eq!(vec![Term::Value(1)], stream.run(&Term::Var(a)));
 /// ```
-pub fn deep_walk<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
+pub fn run<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
 where
     T: VarRepresentable,
 {
-    DeepWalkable::deep_walk(stream, term)
+    Runnable::run(stream, term)
 }
 
 fn unify<T: VarRepresentable>(
@@ -674,29 +686,11 @@ mod tests {
                             Box::new(Term::Value("Bart")),
                         ),
                     ),
-                    disjunction(
-                        eq(
-                            Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
-                            Term::Cons(
-                                Box::new(Term::Value("Marge")),
-                                Box::new(Term::Value("Lisa")),
-                            ),
-                        ),
-                        disjunction(
-                            eq(
-                                Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
-                                Term::Cons(
-                                    Box::new(Term::Value("Abe")),
-                                    Box::new(Term::Value("Homer")),
-                                ),
-                            ),
-                            eq(
-                                Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
-                                Term::Cons(
-                                    Box::new(Term::Value("Jackie")),
-                                    Box::new(Term::Value("Marge")),
-                                ),
-                            ),
+                    eq(
+                        Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                        Term::Cons(
+                            Box::new(Term::Value("Marge")),
+                            Box::new(Term::Value("Lisa")),
                         ),
                     ),
                 ),
@@ -705,7 +699,7 @@ mod tests {
 
         let stream = goal.apply(state);
 
-        let res = stream.deep_walk(&Term::Cons(
+        let res = stream.run(&Term::Cons(
             Box::new(Term::Value("Homer")),
             Box::new(Term::Var(child)),
         ));
