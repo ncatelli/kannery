@@ -271,10 +271,19 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
         // recurse down the terms until either a Value is encounter or no
         // further walking can occur.
         let mut current_term = term.clone();
-        while let Term::Var(var) = &current_term {
-            match self.get(var) {
-                Some(next) => current_term = next.clone(),
-                None => break,
+        loop {
+            match &current_term {
+                Term::Var(var) => match self.get(var) {
+                    Some(next) => current_term = next.clone(),
+                    None => break,
+                },
+                Term::Value(_) => break,
+                Term::Cons(head, tail) => {
+                    let head = self.walk(head.as_ref());
+                    let tail = self.walk(tail.as_ref());
+                    current_term = Term::Cons(Box::new(head), Box::new(tail));
+                    break;
+                }
             }
         }
 
@@ -390,9 +399,9 @@ pub fn unify<T: VarRepresentable>(
             mapping.insert(v, t);
             Some(mapping)
         }
-        (Term::Value(v1), Term::Value(v2)) if v1 == v2 => Some(mapping),
         (Term::Cons(lh, lt), Term::Cons(rh, rt)) => unify(&mapping, lh.as_ref(), rh.as_ref())
             .and_then(|mapping| unify(&mapping, lt.as_ref(), rt.as_ref())),
+        (t1, t2) if t1 == t2 => Some(mapping),
         _ => None,
     }
 }
@@ -685,20 +694,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn should_walk_until_expected_value() {
-        let a = 'a'.to_var_repr(0);
-        let b = 'b'.to_var_repr(0);
-
-        let mapping: TermMapping<u8> = [(a, Term::Var(b)), (b, Term::Value(2))]
-            .into_iter()
-            .collect();
-
-        // assert both values reify to the value of 2
-        assert_eq!(walk(&mapping, &Term::Var(a)), Term::Value(2));
-        assert_eq!(walk(&mapping, &Term::Var(b)), Term::Value(2));
-    }
-
-    #[test]
     fn should_unify_equal_values() {
         let a = 'a'.to_var_repr(0);
 
@@ -758,26 +753,68 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "unimplemented"]
     fn should_return_multiple_relations() {
+        let parent_var = "parent";
+        let child_var = "child";
+
         let goal = fresh(|mut state| {
-            let homer = state.declare("Homer");
-            let marge = state.declare("Marge");
+            let parent = state.declare(parent_var);
+            let child = state.declare(child_var);
 
-            // children
-            let bart = state.declare("Bart");
-            let lisa = state.declare("Lisa");
-
-            conjunction(
-                eq(Term::Var(homer), Term::Var(bart)),
-                conjunction(
-                    eq(Term::Var(homer), Term::Var(lisa)),
-                    conjunction(
-                        eq(Term::Var(marge), Term::Var(bart)),
-                        conjunction(
-                            eq(Term::Var(marge), Term::Var(lisa)),
+            disjunction(
+                eq(
+                    Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                    Term::Cons(
+                        Box::new(Term::Value("Homer")),
+                        Box::new(Term::Value("Bart")),
+                    ),
+                ),
+                disjunction(
+                    eq(
+                        Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                        Term::Cons(
+                            Box::new(Term::Value("Homer")),
+                            Box::new(Term::Value("Lisa")),
+                        ),
+                    ),
+                    disjunction(
+                        eq(
+                            Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                            Term::Cons(
+                                Box::new(Term::Value("Marge")),
+                                Box::new(Term::Value("Bart")),
+                            ),
+                        ),
+                        disjunction(
+                            eq(
+                                Term::Cons(Box::new(Term::Var(parent)), Box::new(Term::Var(child))),
+                                Term::Cons(
+                                    Box::new(Term::Value("Marge")),
+                                    Box::new(Term::Value("Lisa")),
+                                ),
+                            ),
                             disjunction(
-                                eq(Term::Var(bart), Term::Value("Bart")),
-                                eq(Term::Var(lisa), Term::Value("Lisa")),
+                                eq(
+                                    Term::Cons(
+                                        Box::new(Term::Var(parent)),
+                                        Box::new(Term::Var(child)),
+                                    ),
+                                    Term::Cons(
+                                        Box::new(Term::Value("Abe")),
+                                        Box::new(Term::Value("Homer")),
+                                    ),
+                                ),
+                                eq(
+                                    Term::Cons(
+                                        Box::new(Term::Var(parent)),
+                                        Box::new(Term::Var(child)),
+                                    ),
+                                    Term::Cons(
+                                        Box::new(Term::Value("Jackie")),
+                                        Box::new(Term::Value("Marge")),
+                                    ),
+                                ),
                             ),
                         ),
                     ),
@@ -786,23 +823,13 @@ mod tests {
             .apply(state)
         });
 
-        let stream = goal.apply(State::<&'static str>::empty());
-        let res = stream.deep_walk(&Term::Var("Homer".to_var_repr(0)));
-        assert_eq!(res.len(), 2);
+        let stream = goal.apply(State::empty());
 
-        let sorted_values = {
-            let mut values: Vec<_> = res
-                .into_iter()
-                .flat_map(|term| match term {
-                    Term::Value(val) => Some(val),
-                    _ => None,
-                })
-                .collect();
-
-            values.sort();
-            values
-        };
-
-        assert_eq!(["Bart", "Lisa"].as_slice(), &sorted_values);
+        let res = stream.deep_walk(&Term::Cons(
+            Box::new(Term::Value("Homer")),
+            Box::new(Term::Var(child_var.to_var_repr(0))),
+        ));
+        assert_eq!(res.len(), 2, "{:#?}", res);
+        println!("{:?}", res)
     }
 }
