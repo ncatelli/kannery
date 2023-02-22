@@ -1,6 +1,20 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[macro_export]
+macro_rules! value {
+    ($v:expr) => {
+        Term::Value($v)
+    };
+}
+
+#[macro_export]
+macro_rules! var {
+    ($var:expr) => {
+        Term::Var($var)
+    };
+}
+
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
     fn to_var_repr(&self, count: usize) -> Var {
@@ -547,48 +561,33 @@ mod tests {
             disjunction(
                 eq(
                     Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                    Term::Cons(
-                        Box::new(Term::Value("Homer")),
-                        Box::new(Term::Value("Bart")),
-                    ),
+                    Term::Cons(Box::new(value!("Homer")), Box::new(value!("Bart"))),
                 ),
                 disjunction(
                     eq(
                         Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                        Term::Cons(
-                            Box::new(Term::Value("Homer")),
-                            Box::new(Term::Value("Lisa")),
-                        ),
+                        Term::Cons(Box::new(value!("Homer")), Box::new(value!("Lisa"))),
                     ),
                     disjunction(
                         eq(
                             Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                            Term::Cons(
-                                Box::new(Term::Value("Marge")),
-                                Box::new(Term::Value("Bart")),
-                            ),
+                            Term::Cons(Box::new(value!("Marge")), Box::new(value!("Bart"))),
                         ),
                         disjunction(
                             eq(
                                 Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                Term::Cons(
-                                    Box::new(Term::Value("Marge")),
-                                    Box::new(Term::Value("Lisa")),
-                                ),
+                                Term::Cons(Box::new(value!("Marge")), Box::new(value!("Lisa"))),
                             ),
                             disjunction(
                                 eq(
                                     Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                    Term::Cons(
-                                        Box::new(Term::Value("Abe")),
-                                        Box::new(Term::Value("Homer")),
-                                    ),
+                                    Term::Cons(Box::new(value!("Abe")), Box::new(value!("Homer"))),
                                 ),
                                 eq(
                                     Term::Cons(Box::new(parent), Box::new(child)),
                                     Term::Cons(
-                                        Box::new(Term::Value("Jackie")),
-                                        Box::new(Term::Value("Marge")),
+                                        Box::new(value!("Jackie")),
+                                        Box::new(value!("Marge")),
                                     ),
                                 ),
                             ),
@@ -600,7 +599,7 @@ mod tests {
 
         let children_of_homer = || {
             fresh("child", move |child| {
-                parent_fn(Term::Value("Homer"), Term::Var(child))
+                parent_fn(value!("Homer"), var!(child))
             })
         };
         let stream = children_of_homer().apply(State::empty());
