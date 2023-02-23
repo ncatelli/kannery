@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::rc::Rc;
 
 #[macro_export]
 macro_rules! value {
     ($v:expr) => {
-        Term::Value($v)
+        Term::Value(Rc::new($v))
     };
 }
 
@@ -69,7 +70,7 @@ impl Var {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term<T: ValueRepresentable> {
     Var(Var),
-    Value(T),
+    Value(Rc<T>),
     // In place of a traditional cons list.
     Cons(Box<Term<T>>, Box<Term<T>>),
 }
