@@ -537,35 +537,36 @@ mod tests {
     #[test]
     fn should_return_multiple_relations() {
         let parent_fn = |parent: Term<_>, child: Term<_>| {
+            let homer = value!("Homer");
+            let marge = value!("Marge");
+            let bart = value!("Bart");
+            let lisa = value!("Lisa");
+            let abe = value!("Abe");
+            let jackie = value!("Jackie");
+
             disjunction(
                 eq(
                     cons!(parent.clone(), child.clone()),
-                    cons!(value!("Homer"), value!("Bart")),
+                    cons!(homer.clone(), bart.clone()),
                 ),
                 disjunction(
                     eq(
                         cons!(parent.clone(), child.clone()),
-                        cons!(value!("Homer"), value!("Lisa")),
+                        cons!(homer.clone(), lisa.clone()),
                     ),
                     disjunction(
                         eq(
                             cons!(parent.clone(), child.clone()),
-                            cons!(value!("Marge"), value!("Bart")),
+                            cons!(marge.clone(), bart),
                         ),
                         disjunction(
                             eq(
                                 cons!(parent.clone(), child.clone()),
-                                cons!(value!("Marge"), value!("Lisa")),
+                                cons!(marge.clone(), lisa),
                             ),
                             disjunction(
-                                eq(
-                                    cons!(parent.clone(), child.clone()),
-                                    cons!(value!("Abe"), value!("Homer")),
-                                ),
-                                eq(
-                                    cons!(parent, child),
-                                    cons!(value!("Jackie"), value!("Marge")),
-                                ),
+                                eq(cons!(parent.clone(), child.clone()), cons!(abe, homer)),
+                                eq(cons!(parent, child), cons!(jackie, marge)),
                             ),
                         ),
                     ),
