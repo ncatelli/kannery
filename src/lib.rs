@@ -1,6 +1,20 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[macro_export]
+macro_rules! value {
+    ($v:expr) => {
+        Term::Value($v)
+    };
+}
+
+#[macro_export]
+macro_rules! var {
+    ($var:expr) => {
+        Term::Var($var)
+    };
+}
+
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
     fn to_var_repr(&self, count: usize) -> Var {
@@ -547,48 +561,33 @@ mod tests {
             disjunction(
                 eq(
                     Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                    Term::Cons(
-                        Box::new(Term::Value("Homer")),
-                        Box::new(Term::Value("Bart")),
-                    ),
+                    Term::Cons(Box::new(value!("Homer")), Box::new(value!("Bart"))),
                 ),
                 disjunction(
                     eq(
                         Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                        Term::Cons(
-                            Box::new(Term::Value("Homer")),
-                            Box::new(Term::Value("Lisa")),
-                        ),
+                        Term::Cons(Box::new(value!("Homer")), Box::new(value!("Lisa"))),
                     ),
                     disjunction(
                         eq(
                             Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                            Term::Cons(
-                                Box::new(Term::Value("Marge")),
-                                Box::new(Term::Value("Bart")),
-                            ),
+                            Term::Cons(Box::new(value!("Marge")), Box::new(value!("Bart"))),
                         ),
                         disjunction(
                             eq(
                                 Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                Term::Cons(
-                                    Box::new(Term::Value("Marge")),
-                                    Box::new(Term::Value("Lisa")),
-                                ),
+                                Term::Cons(Box::new(value!("Marge")), Box::new(value!("Lisa"))),
                             ),
                             disjunction(
                                 eq(
                                     Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                    Term::Cons(
-                                        Box::new(Term::Value("Abe")),
-                                        Box::new(Term::Value("Homer")),
-                                    ),
+                                    Term::Cons(Box::new(value!("Abe")), Box::new(value!("Homer"))),
                                 ),
                                 eq(
                                     Term::Cons(Box::new(parent), Box::new(child)),
                                     Term::Cons(
-                                        Box::new(Term::Value("Jackie")),
-                                        Box::new(Term::Value("Marge")),
+                                        Box::new(value!("Jackie")),
+                                        Box::new(value!("Marge")),
                                     ),
                                 ),
                             ),
@@ -598,18 +597,8 @@ mod tests {
             )
         };
 
-        let children_of_homer = || {
-            fresh("child", move |child| {
-                parent_fn(Term::Value("Homer"), Term::Var(child))
-            })
-        };
-        let stream = children_of_homer().apply(State::empty());
-        let child_var = "child".to_var_repr(0);
-        let res = stream.run(&Term::Var(child_var));
-
-        assert_eq!(stream.len(), 2, "{:?}", res);
-        let sorted_children = {
-            let mut children = res
+        let sorted_value_strings = |res: Vec<Term<&str>>| {
+            let mut elements = res
                 .into_iter()
                 .flat_map(|term| match term {
                     Term::Value(val) => Some(val.to_string()),
@@ -617,13 +606,42 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            children.sort();
-            children
+            elements.sort();
+            elements
         };
 
+        let children_of_homer = || {
+            fresh("child", move |child| {
+                parent_fn(value!("Homer"), var!(child))
+            })
+        };
+        let stream = children_of_homer().apply(State::empty());
+        let child_var = "child".to_var_repr(0);
+        let res = stream.run(&Term::Var(child_var));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_children = sorted_value_strings(res);
         assert_eq!(
             ["Bart".to_string(), "Lisa".to_string()].as_slice(),
             sorted_children.as_slice()
+        );
+
+        // map parent relationship
+        let parents_of_lisa = || {
+            fresh("parent", move |parent| {
+                parent_fn(var!(parent), value!("Lisa"))
+            })
+        };
+        let stream = parents_of_lisa().apply(State::empty());
+        let parent_var = "parent".to_var_repr(0);
+        let res = stream.run(&Term::Var(parent_var));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_parents = sorted_value_strings(res);
+
+        assert_eq!(
+            ["Homer".to_string(), "Marge".to_string()].as_slice(),
+            sorted_parents.as_slice()
         );
     }
 }
