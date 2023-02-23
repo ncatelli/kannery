@@ -15,6 +15,13 @@ macro_rules! var {
     };
 }
 
+#[macro_export]
+macro_rules! cons {
+    ($head:expr, $tail:expr) => {
+        Term::Cons(Box::new($head), Box::new($tail))
+    };
+}
+
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
     fn to_var_repr(&self, count: usize) -> Var {
@@ -53,16 +60,8 @@ pub struct Var {
 }
 
 impl Var {
-    pub fn new(base: u64, count: usize) -> Self {
+    fn new(base: u64, count: usize) -> Self {
         Self { base, count }
-    }
-
-    pub fn as_base(&self) -> u64 {
-        self.base
-    }
-
-    pub fn as_count(&self) -> usize {
-        self.count
     }
 }
 
@@ -75,32 +74,10 @@ pub enum Term<T: ValueRepresentable> {
     Cons(Box<Term<T>>, Box<Term<T>>),
 }
 
-impl<T: ValueRepresentable> Term<T> {
-    /// Returns a boolean signifying if the type is a `Var` variant.
-    pub fn is_var(&self) -> bool {
-        matches!(self, Term::Var(_))
-    }
-
-    /// Returns a boolean signifying if the type is a `Value` variant.
-    pub fn is_value(&self) -> bool {
-        matches!(self, Term::Value(_))
-    }
-
-    /// Returns a boolean signifying if the type is a `Cons` variant.
-    pub fn is_cons(&self) -> bool {
-        matches!(self, Term::Cons(_, _))
-    }
-}
-
 impl<T: ValueRepresentable> From<(Term<T>, Term<T>)> for Term<T> {
     fn from((head, tail): (Term<T>, Term<T>)) -> Self {
-        cons(head, tail)
+        cons!(head, tail)
     }
-}
-
-/// Generate a cons list from a given head/tail value.
-pub fn cons<T: ValueRepresentable>(head: Term<T>, tail: Term<T>) -> Term<T> {
-    Term::Cons(Box::new(head), Box::new(tail))
 }
 
 /// A map representing potentially recursive Variable to Terminal mappings.
@@ -255,7 +232,8 @@ impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
         if let Term::Cons(head, tail) = term {
             let head_ref = self.walk(head.as_ref());
             let tail_ref = self.walk(tail.as_ref());
-            Term::Cons(Box::new(head_ref), Box::new(tail_ref))
+
+            cons!(head_ref, tail_ref)
         } else {
             term
         }
@@ -560,35 +538,32 @@ mod tests {
         let parent_fn = |parent: Term<_>, child: Term<_>| {
             disjunction(
                 eq(
-                    Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                    Term::Cons(Box::new(value!("Homer")), Box::new(value!("Bart"))),
+                    cons!(parent.clone(), child.clone()),
+                    cons!(value!("Homer"), value!("Bart")),
                 ),
                 disjunction(
                     eq(
-                        Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                        Term::Cons(Box::new(value!("Homer")), Box::new(value!("Lisa"))),
+                        cons!(parent.clone(), child.clone()),
+                        cons!(value!("Homer"), value!("Lisa")),
                     ),
                     disjunction(
                         eq(
-                            Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                            Term::Cons(Box::new(value!("Marge")), Box::new(value!("Bart"))),
+                            cons!(parent.clone(), child.clone()),
+                            cons!(value!("Marge"), value!("Bart")),
                         ),
                         disjunction(
                             eq(
-                                Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                Term::Cons(Box::new(value!("Marge")), Box::new(value!("Lisa"))),
+                                cons!(parent.clone(), child.clone()),
+                                cons!(value!("Marge"), value!("Lisa")),
                             ),
                             disjunction(
                                 eq(
-                                    Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                    Term::Cons(Box::new(value!("Abe")), Box::new(value!("Homer"))),
+                                    cons!(parent.clone(), child.clone()),
+                                    cons!(value!("Abe"), value!("Homer")),
                                 ),
                                 eq(
-                                    Term::Cons(Box::new(parent), Box::new(child)),
-                                    Term::Cons(
-                                        Box::new(value!("Jackie")),
-                                        Box::new(value!("Marge")),
-                                    ),
+                                    cons!(parent, child),
+                                    cons!(value!("Jackie"), value!("Marge")),
                                 ),
                             ),
                         ),
