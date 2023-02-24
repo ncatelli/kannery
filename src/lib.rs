@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::rc::Rc;
 
 /// A helper macro for creating a `Rc`-wrapped `Term::Value` variant.
 #[macro_export]
 macro_rules! value_term {
     ($v:expr) => {
-        Term::Value(Rc::new($v))
+        $crate::Term::Value(std::rc::Rc::new($v))
     };
 }
 
@@ -14,7 +13,7 @@ macro_rules! value_term {
 #[macro_export]
 macro_rules! var_term {
     ($var:expr) => {
-        Term::Var($var)
+        $crate::Term::Var($var)
     };
 }
 
@@ -22,7 +21,7 @@ macro_rules! var_term {
 #[macro_export]
 macro_rules! cons_term {
     ($head:expr, $tail:expr) => {
-        Term::Cons(Box::new($head), Box::new($tail))
+        $crate::Term::Cons(Box::new($head), Box::new($tail))
     };
 }
 
@@ -75,7 +74,7 @@ pub enum Term<T: ValueRepresentable> {
     /// Term contains a variable.
     Var(Var),
     /// Term contains an `Rc`-wrapped value, to keep clones cheap.
-    Value(Rc<T>),
+    Value(std::rc::Rc<T>),
     // In place of a traditional cons list.
     Cons(Box<Term<T>>, Box<Term<T>>),
 }
@@ -351,6 +350,17 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
     }
 }
 
+/// A `Goal` that allocates a new variable of a given representation for use
+/// within a relationship mapping.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let _x_equals = Fresh::new("x", |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// ```
 #[derive(Debug)]
 pub struct Fresh<T, V, F, GO>
 where
@@ -371,6 +381,17 @@ where
     GO: Goal<T>,
     F: Fn(Var) -> GO,
 {
+    /// Declares a variable for a given id before passing it to the passed
+    /// function for use in generating a `Goal`.
+    ///
+    /// # Examples
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let _x_equals = Fresh::new("x", |x| {
+    ///     eq(var_term!(x), value_term!(1))
+    /// });
+    /// ```
     pub fn new(var_id: V, func: F) -> Self {
         Self {
             _value_kind: std::marker::PhantomData,
@@ -393,6 +414,16 @@ where
     }
 }
 
+/// Instantiates a new variable for use in a goal.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let _x_equals = fresh("x", |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// ```
 pub fn fresh<T, V, GO>(var: V, func: impl Fn(Var) -> GO) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -402,6 +433,21 @@ where
     Fresh::new(var, func)
 }
 
+/// A `Goal` that maps an equality relationship between two `Term`s.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     Equal::new(var_term!(x), value_term!(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// ```
 #[derive(Debug)]
 pub struct Equal<T: ValueRepresentable> {
     term1: Term<T>,
@@ -409,6 +455,21 @@ pub struct Equal<T: ValueRepresentable> {
 }
 
 impl<T: ValueRepresentable> Equal<T> {
+    /// Instantiate a new `Equality` relationship between two terms.
+    ///
+    /// # Examples
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let x_equals = fresh('x', |x| {
+    ///     Equal::new(var_term!(x), value_term!(1))
+    /// });
+    /// let stream = x_equals.apply(State::<u8>::empty());
+    /// let x_var = 'x'.to_var_repr(0);
+    /// let res = stream.run(&var_term!(x_var));
+    ///
+    /// assert_eq!(res.len(), 1);
+    /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
     }
@@ -435,12 +496,52 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
     }
 }
 
-pub fn eq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+/// Defines an equality relationship mapping between two `Term`s.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     equal(var_term!(x), value_term!(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// ```
+pub fn equal<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
     Equal<T>: Goal<T>,
 {
     Equal::new(term1, term2)
+}
+
+/// Defines an equality relationship mapping between two `Term`s.
+///
+/// A shorthand alias to [equal].
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// ```
+pub fn eq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    Equal<T>: Goal<T>,
+{
+    equal(term1, term2)
 }
 
 pub struct Disjunction<T, G1, G2>
