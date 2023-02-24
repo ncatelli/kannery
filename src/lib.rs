@@ -3,21 +3,21 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 #[macro_export]
-macro_rules! value {
+macro_rules! value_term {
     ($v:expr) => {
         Term::Value(Rc::new($v))
     };
 }
 
 #[macro_export]
-macro_rules! var {
+macro_rules! var_term {
     ($var:expr) => {
         Term::Var($var)
     };
 }
 
 #[macro_export]
-macro_rules! cons {
+macro_rules! cons_term {
     ($head:expr, $tail:expr) => {
         Term::Cons(Box::new($head), Box::new($tail))
     };
@@ -77,7 +77,7 @@ pub enum Term<T: ValueRepresentable> {
 
 impl<T: ValueRepresentable> From<(Term<T>, Term<T>)> for Term<T> {
     fn from((head, tail): (Term<T>, Term<T>)) -> Self {
-        cons!(head, tail)
+        cons_term!(head, tail)
     }
 }
 
@@ -234,7 +234,7 @@ impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
             let head_ref = self.walk(head.as_ref());
             let tail_ref = self.walk(tail.as_ref());
 
-            cons!(head_ref, tail_ref)
+            cons_term!(head_ref, tail_ref)
         } else {
             term
         }
@@ -537,36 +537,39 @@ mod tests {
     #[test]
     fn should_return_multiple_relations() {
         let parent_fn = |parent: Term<_>, child: Term<_>| {
-            let homer = value!("Homer");
-            let marge = value!("Marge");
-            let bart = value!("Bart");
-            let lisa = value!("Lisa");
-            let abe = value!("Abe");
-            let jackie = value!("Jackie");
+            let homer = value_term!("Homer");
+            let marge = value_term!("Marge");
+            let bart = value_term!("Bart");
+            let lisa = value_term!("Lisa");
+            let abe = value_term!("Abe");
+            let jackie = value_term!("Jackie");
 
             disjunction(
                 eq(
-                    cons!(parent.clone(), child.clone()),
-                    cons!(homer.clone(), bart.clone()),
+                    cons_term!(parent.clone(), child.clone()),
+                    cons_term!(homer.clone(), bart.clone()),
                 ),
                 disjunction(
                     eq(
-                        cons!(parent.clone(), child.clone()),
-                        cons!(homer.clone(), lisa.clone()),
+                        cons_term!(parent.clone(), child.clone()),
+                        cons_term!(homer.clone(), lisa.clone()),
                     ),
                     disjunction(
                         eq(
-                            cons!(parent.clone(), child.clone()),
-                            cons!(marge.clone(), bart),
+                            cons_term!(parent.clone(), child.clone()),
+                            cons_term!(marge.clone(), bart),
                         ),
                         disjunction(
                             eq(
-                                cons!(parent.clone(), child.clone()),
-                                cons!(marge.clone(), lisa),
+                                cons_term!(parent.clone(), child.clone()),
+                                cons_term!(marge.clone(), lisa),
                             ),
                             disjunction(
-                                eq(cons!(parent.clone(), child.clone()), cons!(abe, homer)),
-                                eq(cons!(parent, child), cons!(jackie, marge)),
+                                eq(
+                                    cons_term!(parent.clone(), child.clone()),
+                                    cons_term!(abe, homer),
+                                ),
+                                eq(cons_term!(parent, child), cons_term!(jackie, marge)),
                             ),
                         ),
                     ),
@@ -587,10 +590,12 @@ mod tests {
             elements
         };
 
-        let children_of_homer = fresh("child", |child| parent_fn(value!("Homer"), var!(child)));
+        let children_of_homer = fresh("child", |child| {
+            parent_fn(value_term!("Homer"), var_term!(child))
+        });
         let stream = children_of_homer.apply(State::empty());
         let child_var = "child".to_var_repr(0);
-        let res = stream.run(&var!(child_var));
+        let res = stream.run(&var_term!(child_var));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
         let sorted_children = sorted_value_strings(res);
@@ -600,7 +605,9 @@ mod tests {
         );
 
         // map parent relationship
-        let parents_of_lisa = fresh("parent", |parent| parent_fn(var!(parent), value!("Lisa")));
+        let parents_of_lisa = fresh("parent", |parent| {
+            parent_fn(var_term!(parent), value_term!("Lisa"))
+        });
         let stream = parents_of_lisa.apply(State::empty());
         let parent_var = "parent".to_var_repr(0);
         let res = stream.run(&Term::Var(parent_var));
@@ -617,36 +624,39 @@ mod tests {
     #[test]
     fn should_define_relations_without_fresh() {
         let parent_fn = |parent: Term<_>, child: Term<_>| {
-            let homer = value!("Homer");
-            let marge = value!("Marge");
-            let bart = value!("Bart");
-            let lisa = value!("Lisa");
-            let abe = value!("Abe");
-            let jackie = value!("Jackie");
+            let homer = value_term!("Homer");
+            let marge = value_term!("Marge");
+            let bart = value_term!("Bart");
+            let lisa = value_term!("Lisa");
+            let abe = value_term!("Abe");
+            let jackie = value_term!("Jackie");
 
             disjunction(
                 eq(
-                    cons!(parent.clone(), child.clone()),
-                    cons!(homer.clone(), bart.clone()),
+                    cons_term!(parent.clone(), child.clone()),
+                    cons_term!(homer.clone(), bart.clone()),
                 ),
                 disjunction(
                     eq(
-                        cons!(parent.clone(), child.clone()),
-                        cons!(homer.clone(), lisa.clone()),
+                        cons_term!(parent.clone(), child.clone()),
+                        cons_term!(homer.clone(), lisa.clone()),
                     ),
                     disjunction(
                         eq(
-                            cons!(parent.clone(), child.clone()),
-                            cons!(marge.clone(), bart),
+                            cons_term!(parent.clone(), child.clone()),
+                            cons_term!(marge.clone(), bart),
                         ),
                         disjunction(
                             eq(
-                                cons!(parent.clone(), child.clone()),
-                                cons!(marge.clone(), lisa),
+                                cons_term!(parent.clone(), child.clone()),
+                                cons_term!(marge.clone(), lisa),
                             ),
                             disjunction(
-                                eq(cons!(parent.clone(), child.clone()), cons!(abe, homer)),
-                                eq(cons!(parent, child), cons!(jackie, marge)),
+                                eq(
+                                    cons_term!(parent.clone(), child.clone()),
+                                    cons_term!(abe, homer),
+                                ),
+                                eq(cons_term!(parent, child), cons_term!(jackie, marge)),
                             ),
                         ),
                     ),
@@ -669,7 +679,7 @@ mod tests {
 
         let mut state = State::empty();
         let child = state.declare("child");
-        let children_of_homer = || parent_fn(value!("Homer"), var!(child));
+        let children_of_homer = || parent_fn(value_term!("Homer"), var_term!(child));
         let stream = children_of_homer().apply(state);
         let res = stream.run(&Term::Var(child));
 
@@ -683,9 +693,9 @@ mod tests {
         // map parent relationship
         let mut state = State::empty();
         let parent = state.declare("child");
-        let parents_of_lisa = parent_fn(var!(parent), value!("Lisa"));
+        let parents_of_lisa = parent_fn(var_term!(parent), value_term!("Lisa"));
         let stream = parents_of_lisa.apply(state);
-        let res = stream.run(&var!(parent));
+        let res = stream.run(&var_term!(parent));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
         let sorted_parents = sorted_value_strings(res);
