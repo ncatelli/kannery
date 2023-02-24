@@ -675,10 +675,10 @@ mod tests {
             elements
         };
 
-        let mut state = State::<&str>::empty();
+        let mut state = State::empty();
         let child = state.declare("child");
         let children_of_homer = || parent_fn(value!("Homer"), var!(child));
-        let stream = children_of_homer().apply(State::empty());
+        let stream = children_of_homer().apply(state);
         let res = stream.run(&Term::Var(child));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
@@ -689,10 +689,10 @@ mod tests {
         );
 
         // map parent relationship
-        let mut state = State::<&str>::empty();
+        let mut state = State::empty();
         let parent = state.declare("child");
         let parents_of_lisa = || parent_fn(var!(parent), value!("Lisa"));
-        let stream = parents_of_lisa().apply(State::empty());
+        let stream = parents_of_lisa().apply(state);
         let res = stream.run(&var!(parent));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
