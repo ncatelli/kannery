@@ -594,7 +594,7 @@ mod tests {
         };
         let stream = children_of_homer().apply(State::empty());
         let child_var = "child".to_var_repr(0);
-        let res = stream.run(&Term::Var(child_var));
+        let res = stream.run(&var!(child_var));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
         let sorted_children = sorted_value_strings(res);
@@ -612,6 +612,88 @@ mod tests {
         let stream = parents_of_lisa().apply(State::empty());
         let parent_var = "parent".to_var_repr(0);
         let res = stream.run(&Term::Var(parent_var));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_parents = sorted_value_strings(res);
+
+        assert_eq!(
+            ["Homer".to_string(), "Marge".to_string()].as_slice(),
+            sorted_parents.as_slice()
+        );
+    }
+
+    #[test]
+    fn should_define_relations_without_fresh() {
+        let parent_fn = |parent: Term<_>, child: Term<_>| {
+            let homer = value!("Homer");
+            let marge = value!("Marge");
+            let bart = value!("Bart");
+            let lisa = value!("Lisa");
+            let abe = value!("Abe");
+            let jackie = value!("Jackie");
+
+            disjunction(
+                eq(
+                    cons!(parent.clone(), child.clone()),
+                    cons!(homer.clone(), bart.clone()),
+                ),
+                disjunction(
+                    eq(
+                        cons!(parent.clone(), child.clone()),
+                        cons!(homer.clone(), lisa.clone()),
+                    ),
+                    disjunction(
+                        eq(
+                            cons!(parent.clone(), child.clone()),
+                            cons!(marge.clone(), bart),
+                        ),
+                        disjunction(
+                            eq(
+                                cons!(parent.clone(), child.clone()),
+                                cons!(marge.clone(), lisa),
+                            ),
+                            disjunction(
+                                eq(cons!(parent.clone(), child.clone()), cons!(abe, homer)),
+                                eq(cons!(parent, child), cons!(jackie, marge)),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        };
+
+        let sorted_value_strings = |res: Vec<Term<&str>>| {
+            let mut elements = res
+                .into_iter()
+                .flat_map(|term| match term {
+                    Term::Value(val) => Some(val.to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            elements.sort();
+            elements
+        };
+
+        let mut state = State::<&str>::empty();
+        let child = state.declare("child");
+        let children_of_homer = || parent_fn(value!("Homer"), var!(child));
+        let stream = children_of_homer().apply(State::empty());
+        let res = stream.run(&Term::Var(child));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_children = sorted_value_strings(res);
+        assert_eq!(
+            ["Bart".to_string(), "Lisa".to_string()].as_slice(),
+            sorted_children.as_slice()
+        );
+
+        // map parent relationship
+        let mut state = State::<&str>::empty();
+        let parent = state.declare("child");
+        let parents_of_lisa = || parent_fn(var!(parent), value!("Lisa"));
+        let stream = parents_of_lisa().apply(State::empty());
+        let res = stream.run(&var!(parent));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
         let sorted_parents = sorted_value_strings(res);
