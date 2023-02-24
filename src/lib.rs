@@ -587,12 +587,10 @@ mod tests {
             elements
         };
 
-        let children_of_homer = || {
-            fresh("child", move |child| {
-                parent_fn(value!("Homer"), var!(child))
-            })
-        };
-        let stream = children_of_homer().apply(State::empty());
+        let children_of_homer = fresh("child", move |child| {
+            parent_fn(value!("Homer"), var!(child))
+        });
+        let stream = children_of_homer.apply(State::empty());
         let child_var = "child".to_var_repr(0);
         let res = stream.run(&var!(child_var));
 
@@ -604,12 +602,10 @@ mod tests {
         );
 
         // map parent relationship
-        let parents_of_lisa = || {
-            fresh("parent", move |parent| {
-                parent_fn(var!(parent), value!("Lisa"))
-            })
-        };
-        let stream = parents_of_lisa().apply(State::empty());
+        let parents_of_lisa = fresh("parent", move |parent| {
+            parent_fn(var!(parent), value!("Lisa"))
+        });
+        let stream = parents_of_lisa.apply(State::empty());
         let parent_var = "parent".to_var_repr(0);
         let res = stream.run(&Term::Var(parent_var));
 
@@ -691,8 +687,8 @@ mod tests {
         // map parent relationship
         let mut state = State::empty();
         let parent = state.declare("child");
-        let parents_of_lisa = || parent_fn(var!(parent), value!("Lisa"));
-        let stream = parents_of_lisa().apply(state);
+        let parents_of_lisa = parent_fn(var!(parent), value!("Lisa"));
+        let stream = parents_of_lisa.apply(state);
         let res = stream.run(&var!(parent));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
