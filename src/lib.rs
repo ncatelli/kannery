@@ -1,17 +1,27 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+/// A helper macro for creating a `Rc`-wrapped `Term::Value` variant.
 #[macro_export]
-macro_rules! value {
+macro_rules! value_term {
     ($v:expr) => {
-        Term::Value($v)
+        $crate::Term::Value(std::rc::Rc::new($v))
     };
 }
 
+/// A helper macro for creating a `Term::Var` variant.
 #[macro_export]
-macro_rules! var {
+macro_rules! var_term {
     ($var:expr) => {
-        Term::Var($var)
+        $crate::Term::Var($var)
+    };
+}
+
+/// A helper macro for creating a `Term::Cons` variant from two sub-`Term`s.
+#[macro_export]
+macro_rules! cons_term {
+    ($head:expr, $tail:expr) => {
+        $crate::Term::Cons(Box::new($head), Box::new($tail))
     };
 }
 
@@ -53,54 +63,26 @@ pub struct Var {
 }
 
 impl Var {
-    pub fn new(base: u64, count: usize) -> Self {
+    fn new(base: u64, count: usize) -> Self {
         Self { base, count }
-    }
-
-    pub fn as_base(&self) -> u64 {
-        self.base
-    }
-
-    pub fn as_count(&self) -> usize {
-        self.count
     }
 }
 
-/// A Term representing either a Value or Variable.
+/// A Term representing either a Value or Variable or list of Terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term<T: ValueRepresentable> {
+    /// Term contains a variable.
     Var(Var),
-    Value(T),
+    /// Term contains an `Rc`-wrapped value, to keep clones cheap.
+    Value(std::rc::Rc<T>),
     // In place of a traditional cons list.
     Cons(Box<Term<T>>, Box<Term<T>>),
 }
 
-impl<T: ValueRepresentable> Term<T> {
-    /// Returns a boolean signifying if the type is a `Var` variant.
-    pub fn is_var(&self) -> bool {
-        matches!(self, Term::Var(_))
-    }
-
-    /// Returns a boolean signifying if the type is a `Value` variant.
-    pub fn is_value(&self) -> bool {
-        matches!(self, Term::Value(_))
-    }
-
-    /// Returns a boolean signifying if the type is a `Cons` variant.
-    pub fn is_cons(&self) -> bool {
-        matches!(self, Term::Cons(_, _))
-    }
-}
-
 impl<T: ValueRepresentable> From<(Term<T>, Term<T>)> for Term<T> {
     fn from((head, tail): (Term<T>, Term<T>)) -> Self {
-        cons(head, tail)
+        cons_term!(head, tail)
     }
-}
-
-/// Generate a cons list from a given head/tail value.
-pub fn cons<T: ValueRepresentable>(head: Term<T>, tail: Term<T>) -> Term<T> {
-    Term::Cons(Box::new(head), Box::new(tail))
 }
 
 /// A map representing potentially recursive Variable to Terminal mappings.
@@ -112,22 +94,33 @@ type ReprMapping = HashMap<Var, String>;
 /// A map representing a Variable repr's occurrence count.
 type OccurrenceCounter = HashMap<String, usize>;
 
+/// A state object for a given value that stores mappings of relationships
+/// between `Term`s.
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct State<T: ValueRepresentable> {
+    /// tracks the occurrence of a variable of a given representation.
     occurence_counter: OccurrenceCounter,
+    /// Mappings of `Term`s relationships to eachother.
     term_mapping: TermMapping<T>,
 
+    /// Mappings of `Var`s to their corresponding formattable representation.
     repr_mapping: ReprMapping,
 }
-impl<T: Default + ValueRepresentable> State<T> {
+
+impl<T: ValueRepresentable> State<T> {
+    /// Returns an empty State object for a given type.
     pub fn empty() -> Self {
-        Self::default()
+        Self {
+            occurence_counter: HashMap::new(),
+            term_mapping: HashMap::new(),
+            repr_mapping: HashMap::new(),
+        }
     }
 }
 
 impl<T: ValueRepresentable> State<T> {
     #[must_use]
-    pub fn new(
+    fn new(
         occurence_counter: OccurrenceCounter,
         term_mapping: TermMapping<T>,
         repr_mapping: ReprMapping,
@@ -141,8 +134,17 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    /// Dedeclare a tracked `Var` occurrence for a given key.
-    fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
+    /// Declare a tracked `Var` occurrence for a given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let mut state = State::<()>::empty();
+    /// let _var = state.declare("x");
+    /// ```
+    pub fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -232,10 +234,7 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
 }
 
 /// Walk the terminal mapping returning the resolved term of a given variable, or itself.
-///
-/// # Examples
-///
-pub fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
+fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
 where
     T: VarRepresentable,
     M: Walkable<T>,
@@ -255,7 +254,8 @@ impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
         if let Term::Cons(head, tail) = term {
             let head_ref = self.walk(head.as_ref());
             let tail_ref = self.walk(tail.as_ref());
-            Term::Cons(Box::new(head_ref), Box::new(tail_ref))
+
+            cons_term!(head_ref, tail_ref)
         } else {
             term
         }
@@ -283,7 +283,6 @@ where
 /// Resolve a variable against a set of states, returning all possible values.
 ///
 /// # Examples
-///
 pub fn run<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
 where
     T: VarRepresentable,
@@ -351,6 +350,17 @@ impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
     }
 }
 
+/// A `Goal` that allocates a new variable of a given representation for use
+/// within a relationship mapping.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let _x_equals = Fresh::new("x", |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// ```
 #[derive(Debug)]
 pub struct Fresh<T, V, F, GO>
 where
@@ -371,6 +381,17 @@ where
     GO: Goal<T>,
     F: Fn(Var) -> GO,
 {
+    /// Declares a variable for a given id before passing it to the passed
+    /// function for use in generating a `Goal`.
+    ///
+    /// # Examples
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let _x_equals = Fresh::new("x", |x| {
+    ///     eq(var_term!(x), value_term!(1))
+    /// });
+    /// ```
     pub fn new(var_id: V, func: F) -> Self {
         Self {
             _value_kind: std::marker::PhantomData,
@@ -393,6 +414,16 @@ where
     }
 }
 
+/// Instantiates a new variable for use in a goal.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let _x_equals = fresh("x", |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// ```
 pub fn fresh<T, V, GO>(var: V, func: impl Fn(Var) -> GO) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -402,6 +433,21 @@ where
     Fresh::new(var, func)
 }
 
+/// A `Goal` that maps an equality relationship between two `Term`s.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     Equal::new(var_term!(x), value_term!(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// ```
 #[derive(Debug)]
 pub struct Equal<T: ValueRepresentable> {
     term1: Term<T>,
@@ -409,6 +455,21 @@ pub struct Equal<T: ValueRepresentable> {
 }
 
 impl<T: ValueRepresentable> Equal<T> {
+    /// Instantiate a new `Equality` relationship between two terms.
+    ///
+    /// # Examples
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let x_equals = fresh('x', |x| {
+    ///     Equal::new(var_term!(x), value_term!(1))
+    /// });
+    /// let stream = x_equals.apply(State::<u8>::empty());
+    /// let x_var = 'x'.to_var_repr(0);
+    /// let res = stream.run(&var_term!(x_var));
+    ///
+    /// assert_eq!(res.len(), 1);
+    /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
     }
@@ -435,12 +496,52 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
     }
 }
 
-pub fn eq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+/// Defines an equality relationship mapping between two `Term`s.
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     equal(var_term!(x), value_term!(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// ```
+pub fn equal<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
     Equal<T>: Goal<T>,
 {
     Equal::new(term1, term2)
+}
+
+/// Defines an equality relationship mapping between two `Term`s.
+///
+/// A shorthand alias to [equal].
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// ```
+pub fn eq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    Equal<T>: Goal<T>,
+{
+    equal(term1, term2)
 }
 
 pub struct Disjunction<T, G1, G2>
@@ -489,7 +590,6 @@ where
 /// in either goal. Logically similar to an `or`.
 ///
 /// # Examples
-///
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -543,7 +643,6 @@ where
 /// that are valid in both goals. Logically similar to an `and`.
 ///
 /// # Examples
-///
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -558,38 +657,39 @@ mod tests {
     #[test]
     fn should_return_multiple_relations() {
         let parent_fn = |parent: Term<_>, child: Term<_>| {
+            let homer = value_term!("Homer");
+            let marge = value_term!("Marge");
+            let bart = value_term!("Bart");
+            let lisa = value_term!("Lisa");
+            let abe = value_term!("Abe");
+            let jackie = value_term!("Jackie");
+
             disjunction(
                 eq(
-                    Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                    Term::Cons(Box::new(value!("Homer")), Box::new(value!("Bart"))),
+                    cons_term!(parent.clone(), child.clone()),
+                    cons_term!(homer.clone(), bart.clone()),
                 ),
                 disjunction(
                     eq(
-                        Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                        Term::Cons(Box::new(value!("Homer")), Box::new(value!("Lisa"))),
+                        cons_term!(parent.clone(), child.clone()),
+                        cons_term!(homer.clone(), lisa.clone()),
                     ),
                     disjunction(
                         eq(
-                            Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                            Term::Cons(Box::new(value!("Marge")), Box::new(value!("Bart"))),
+                            cons_term!(parent.clone(), child.clone()),
+                            cons_term!(marge.clone(), bart),
                         ),
                         disjunction(
                             eq(
-                                Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                Term::Cons(Box::new(value!("Marge")), Box::new(value!("Lisa"))),
+                                cons_term!(parent.clone(), child.clone()),
+                                cons_term!(marge.clone(), lisa),
                             ),
                             disjunction(
                                 eq(
-                                    Term::Cons(Box::new(parent.clone()), Box::new(child.clone())),
-                                    Term::Cons(Box::new(value!("Abe")), Box::new(value!("Homer"))),
+                                    cons_term!(parent.clone(), child.clone()),
+                                    cons_term!(abe, homer),
                                 ),
-                                eq(
-                                    Term::Cons(Box::new(parent), Box::new(child)),
-                                    Term::Cons(
-                                        Box::new(value!("Jackie")),
-                                        Box::new(value!("Marge")),
-                                    ),
-                                ),
+                                eq(cons_term!(parent, child), cons_term!(jackie, marge)),
                             ),
                         ),
                     ),
@@ -610,14 +710,12 @@ mod tests {
             elements
         };
 
-        let children_of_homer = || {
-            fresh("child", move |child| {
-                parent_fn(value!("Homer"), var!(child))
-            })
-        };
-        let stream = children_of_homer().apply(State::empty());
+        let children_of_homer = fresh("child", |child| {
+            parent_fn(value_term!("Homer"), var_term!(child))
+        });
+        let stream = children_of_homer.apply(State::empty());
         let child_var = "child".to_var_repr(0);
-        let res = stream.run(&Term::Var(child_var));
+        let res = stream.run(&var_term!(child_var));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
         let sorted_children = sorted_value_strings(res);
@@ -627,14 +725,97 @@ mod tests {
         );
 
         // map parent relationship
-        let parents_of_lisa = || {
-            fresh("parent", move |parent| {
-                parent_fn(var!(parent), value!("Lisa"))
-            })
-        };
-        let stream = parents_of_lisa().apply(State::empty());
+        let parents_of_lisa = fresh("parent", |parent| {
+            parent_fn(var_term!(parent), value_term!("Lisa"))
+        });
+        let stream = parents_of_lisa.apply(State::empty());
         let parent_var = "parent".to_var_repr(0);
         let res = stream.run(&Term::Var(parent_var));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_parents = sorted_value_strings(res);
+
+        assert_eq!(
+            ["Homer".to_string(), "Marge".to_string()].as_slice(),
+            sorted_parents.as_slice()
+        );
+    }
+
+    #[test]
+    fn should_define_relations_without_fresh() {
+        let parent_fn = |parent: Term<_>, child: Term<_>| {
+            let homer = value_term!("Homer");
+            let marge = value_term!("Marge");
+            let bart = value_term!("Bart");
+            let lisa = value_term!("Lisa");
+            let abe = value_term!("Abe");
+            let jackie = value_term!("Jackie");
+
+            disjunction(
+                eq(
+                    cons_term!(parent.clone(), child.clone()),
+                    cons_term!(homer.clone(), bart.clone()),
+                ),
+                disjunction(
+                    eq(
+                        cons_term!(parent.clone(), child.clone()),
+                        cons_term!(homer.clone(), lisa.clone()),
+                    ),
+                    disjunction(
+                        eq(
+                            cons_term!(parent.clone(), child.clone()),
+                            cons_term!(marge.clone(), bart),
+                        ),
+                        disjunction(
+                            eq(
+                                cons_term!(parent.clone(), child.clone()),
+                                cons_term!(marge.clone(), lisa),
+                            ),
+                            disjunction(
+                                eq(
+                                    cons_term!(parent.clone(), child.clone()),
+                                    cons_term!(abe, homer),
+                                ),
+                                eq(cons_term!(parent, child), cons_term!(jackie, marge)),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        };
+
+        let sorted_value_strings = |res: Vec<Term<&str>>| {
+            let mut elements = res
+                .into_iter()
+                .flat_map(|term| match term {
+                    Term::Value(val) => Some(val.to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            elements.sort();
+            elements
+        };
+
+        let mut state = State::empty();
+        let child = state.declare("child");
+        let children_of_homer = || parent_fn(value_term!("Homer"), var_term!(child));
+        let stream = children_of_homer().apply(state);
+        let res = stream.run(&Term::Var(child));
+
+        assert_eq!(stream.len(), 2, "{:?}", res);
+        let sorted_children = sorted_value_strings(res);
+        assert_eq!(
+            ["Bart".to_string(), "Lisa".to_string()].as_slice(),
+            sorted_children.as_slice()
+        );
+
+        // map parent relationship
+        let mut state = State::empty();
+        let parent = state.declare("parent");
+        let parents_of_lisa = parent_fn(var_term!(parent), value_term!("Lisa"));
+        let stream = parents_of_lisa.apply(state);
+        let res = stream.run(&var_term!(parent));
 
         assert_eq!(stream.len(), 2, "{:?}", res);
         let sorted_parents = sorted_value_strings(res);
