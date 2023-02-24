@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
+/// A helper macro for creating a `Rc`-wrapped `Term::Value` variant.
 #[macro_export]
 macro_rules! value_term {
     ($v:expr) => {
@@ -9,6 +10,7 @@ macro_rules! value_term {
     };
 }
 
+/// A helper macro for creating a `Term::Var` variant.
 #[macro_export]
 macro_rules! var_term {
     ($var:expr) => {
@@ -16,6 +18,7 @@ macro_rules! var_term {
     };
 }
 
+/// A helper macro for creating a `Term::Cons` variant from two sub-`Term`s.
 #[macro_export]
 macro_rules! cons_term {
     ($head:expr, $tail:expr) => {
@@ -66,10 +69,12 @@ impl Var {
     }
 }
 
-/// A Term representing either a Value or Variable.
+/// A Term representing either a Value or Variable or list of Terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term<T: ValueRepresentable> {
+    /// Term contains a variable.
     Var(Var),
+    /// Term contains an `Rc`-wrapped value, to keep clones cheap.
     Value(Rc<T>),
     // In place of a traditional cons list.
     Cons(Box<Term<T>>, Box<Term<T>>),
@@ -90,22 +95,33 @@ type ReprMapping = HashMap<Var, String>;
 /// A map representing a Variable repr's occurrence count.
 type OccurrenceCounter = HashMap<String, usize>;
 
+/// A state object for a given value that stores mappings of relationships
+/// between `Term`s.
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct State<T: ValueRepresentable> {
+    /// tracks the occurrence of a variable of a given representation.
     occurence_counter: OccurrenceCounter,
+    /// Mappings of `Term`s relationships to eachother.
     term_mapping: TermMapping<T>,
 
+    /// Mappings of `Var`s to their corresponding formattable representation.
     repr_mapping: ReprMapping,
 }
-impl<T: Default + ValueRepresentable> State<T> {
+
+impl<T: ValueRepresentable> State<T> {
+    /// Returns an empty State object for a given type.
     pub fn empty() -> Self {
-        Self::default()
+        Self {
+            occurence_counter: HashMap::new(),
+            term_mapping: HashMap::new(),
+            repr_mapping: HashMap::new(),
+        }
     }
 }
 
 impl<T: ValueRepresentable> State<T> {
     #[must_use]
-    pub fn new(
+    fn new(
         occurence_counter: OccurrenceCounter,
         term_mapping: TermMapping<T>,
         repr_mapping: ReprMapping,
@@ -119,8 +135,17 @@ impl<T: ValueRepresentable> State<T> {
 }
 
 impl<T: ValueRepresentable> State<T> {
-    /// Dedeclare a tracked `Var` occurrence for a given key.
-    fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
+    /// Declare a tracked `Var` occurrence for a given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let mut state = State::<()>::empty();
+    /// let _var = state.declare("x");
+    /// ```
+    pub fn declare<VAR: VarRepresentable + std::fmt::Display>(&mut self, key: VAR) -> Var {
         let repr = key.to_string();
         let occurrences = self.occurence_counter.get(&repr).copied().unwrap_or(0);
         let var = key.to_var_repr(occurrences);
@@ -210,10 +235,7 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
 }
 
 /// Walk the terminal mapping returning the resolved term of a given variable, or itself.
-///
-/// # Examples
-///
-pub fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
+fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
 where
     T: VarRepresentable,
     M: Walkable<T>,
@@ -262,7 +284,6 @@ where
 /// Resolve a variable against a set of states, returning all possible values.
 ///
 /// # Examples
-///
 pub fn run<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
 where
     T: VarRepresentable,
@@ -468,7 +489,6 @@ where
 /// in either goal. Logically similar to an `or`.
 ///
 /// # Examples
-///
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -522,7 +542,6 @@ where
 /// that are valid in both goals. Logically similar to an `and`.
 ///
 /// # Examples
-///
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
@@ -692,7 +711,7 @@ mod tests {
 
         // map parent relationship
         let mut state = State::empty();
-        let parent = state.declare("child");
+        let parent = state.declare("parent");
         let parents_of_lisa = parent_fn(var_term!(parent), value_term!("Lisa"));
         let stream = parents_of_lisa.apply(state);
         let res = stream.run(&var_term!(parent));
