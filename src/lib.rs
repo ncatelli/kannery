@@ -433,6 +433,27 @@ where
     Fresh::new(var, func)
 }
 
+/// Declares a new variable for use in a goal.
+///
+/// A shorthand alias to [fresh].
+///
+/// # Examples
+/// ```
+/// use kannery::*;
+///
+/// let _x_equals = declare("x", |x| {
+///     eq(var_term!(x), value_term!(1))
+/// });
+/// ```
+pub fn declare<T, V, GO>(var: V, func: impl Fn(Var) -> GO) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    V: VarRepresentable + std::fmt::Display,
+    GO: Goal<T>,
+{
+    fresh(var, func)
+}
+
 /// A `Goal` that maps an equality relationship between two `Term`s.
 ///
 /// # Examples
@@ -679,6 +700,28 @@ where
     disjunction(goal1, goal2)
 }
 
+/// A `Goal` that maps a conjunction relationship between two `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     fresh('y', move |y| {
+///         Conjunction::new(
+///             equal(var_term!(x), var_term!(y)),
+///             equal(var_term!(y), value_term!(1))
+///         )
+///     })
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// ```
 pub struct Conjunction<T, G1, G2>
 where
     T: ValueRepresentable,
@@ -721,15 +764,65 @@ where
     }
 }
 
-/// Creates the conjunction of two goals, flattening the state for all states
-/// that are valid in both goals. Logically similar to an `and`.
+/// A `Goal` that maps a conjunction relationship between two `Term`s.
 ///
 /// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     fresh('y', move |y| {
+///         conjunction(
+///             equal(var_term!(x), var_term!(y)),
+///             equal(var_term!(y), value_term!(1))
+///         )
+///     })
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// ```
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
     T: ValueRepresentable,
 {
     Conjunction::new(goal1, goal2)
+}
+
+/// Returns the states that are true of both of two goals. Equivalent to a
+/// logical and.
+///
+/// A shorthand alias to [conjunction].
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     fresh('y', move |y| {
+///         both(
+///             equal(var_term!(x), var_term!(y)),
+///             equal(var_term!(y), value_term!(1))
+///         )
+///     })
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// ```
+pub fn both<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+{
+    conjunction(goal1, goal2)
 }
 
 #[cfg(test)]
