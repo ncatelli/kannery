@@ -680,7 +680,7 @@ where
 /// ```
 /// use kannery::*;
 ///
-/// let x_equals = fresh('x', |x| {
+/// let x_equals = declare('x', |x| {
 ///     either(
 ///         equal(var_term!(x), value_term!(1)),
 ///         equal(var_term!(x), value_term!(2))
@@ -803,8 +803,8 @@ where
 /// ```
 /// use kannery::*;
 ///
-/// let x_equals = fresh('x', |x| {
-///     fresh('y', move |y| {
+/// let x_equals = declare('x', |x| {
+///     declare('y', move |y| {
 ///         both(
 ///             equal(var_term!(x), var_term!(y)),
 ///             equal(var_term!(y), value_term!(1))
