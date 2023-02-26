@@ -290,6 +290,8 @@ where
     Runnable::run(stream, term)
 }
 
+/// Attempts to unify two terms against a mapping, returning the new mapping
+/// adjusted for the terms as they are evaluated against a condition func.
 pub fn unify<T, F>(
     mapping: &TermMapping<T>,
     term1: &Term<T>,
