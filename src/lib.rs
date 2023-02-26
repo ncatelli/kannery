@@ -290,7 +290,7 @@ where
     Runnable::run(stream, term)
 }
 
-fn unify<T, F>(
+pub fn unify<T, F>(
     mapping: &TermMapping<T>,
     term1: &Term<T>,
     term2: &Term<T>,
