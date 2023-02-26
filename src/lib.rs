@@ -315,6 +315,8 @@ fn unify<T: VarRepresentable>(
 // Represents a calleable stream of states.
 pub type Stream<T> = Vec<State<T>>;
 
+/// The Goal trait represents the ability to apply an action to a set of
+/// states that can be evaluated against those terms.
 pub trait Goal<T: ValueRepresentable> {
     fn apply(&self, state: State<T>) -> Stream<T>;
 }
@@ -326,27 +328,6 @@ where
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
         self(state)
-    }
-}
-
-pub struct BoxedGoal<'a, T: ValueRepresentable> {
-    goal: Box<dyn Goal<T> + 'a>,
-}
-
-impl<'a, T: ValueRepresentable> BoxedGoal<'a, T> {
-    pub fn new<S>(state: S) -> Self
-    where
-        S: Goal<T> + 'a,
-    {
-        BoxedGoal {
-            goal: Box::new(state),
-        }
-    }
-}
-
-impl<'a, T: ValueRepresentable> Goal<T> for BoxedGoal<'a, T> {
-    fn apply(&self, state: State<T>) -> Stream<T> {
-        self.goal.apply(state)
     }
 }
 
