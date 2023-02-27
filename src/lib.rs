@@ -447,7 +447,7 @@ where
 }
 
 fn unify_conditional_expression<T, F>(
-    state: State<T>,
+    state: &State<T>,
     lhs: &Term<T>,
     rhs: &Term<T>,
     condition_func: F,
@@ -462,9 +462,9 @@ where
     // Return an empty stream if the mapping is `None`.
     if let Some(term_mapping) = unified_mapping {
         vec![State::new(
-            state.occurence_counter,
+            state.occurence_counter.clone(),
             term_mapping,
-            state.repr_mapping,
+            state.repr_mapping.clone(),
         )]
     } else {
         Stream::new()
@@ -519,7 +519,7 @@ impl<T: ValueRepresentable> Equal<T> {
 
 impl<T: VarRepresentable> Goal<T> for Equal<T> {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs == rhs)
+        unify_conditional_expression(&state, &self.term1, &self.term2, |lhs, rhs| lhs == rhs)
     }
 }
 
@@ -635,7 +635,7 @@ impl<T: ValueRepresentable> NotEqual<T> {
 
 impl<T: VarRepresentable> Goal<T> for NotEqual<T> {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs != rhs)
+        unify_conditional_expression(&state, &self.term1, &self.term2, |lhs, rhs| lhs != rhs)
     }
 }
 
@@ -768,7 +768,7 @@ where
     T: VarRepresentable + PartialOrd,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs < rhs)
+        unify_conditional_expression(&state, &self.term1, &self.term2, |lhs, rhs| lhs < rhs)
     }
 }
 
@@ -870,7 +870,7 @@ where
     T: VarRepresentable + PartialOrd,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs <= rhs)
+        unify_conditional_expression(&state, &self.term1, &self.term2, |lhs, rhs| lhs <= rhs)
     }
 }
 
@@ -972,7 +972,7 @@ where
     T: VarRepresentable + PartialOrd,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs > rhs)
+        unify_conditional_expression(&state, &self.term1, &self.term2, |lhs, rhs| lhs > rhs)
     }
 }
 
@@ -1074,7 +1074,7 @@ where
     T: VarRepresentable + PartialOrd,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs >= rhs)
+        unify_conditional_expression(&state, &self.term1, &self.term2, |lhs, rhs| lhs >= rhs)
     }
 }
 
