@@ -236,7 +236,7 @@ impl<T: ValueRepresentable> Walkable<T> for TermMapping<T> {
 /// Walk the terminal mapping returning the resolved term of a given variable, or itself.
 fn walk<T, M>(mapping: &M, term: &Term<T>) -> Term<T>
 where
-    T: VarRepresentable,
+    T: ValueRepresentable,
     M: Walkable<T>,
 {
     Walkable::walk(mapping, term)
@@ -299,7 +299,7 @@ pub fn unify<T, F>(
     condition_func: F,
 ) -> Option<TermMapping<T>>
 where
-    T: VarRepresentable,
+    T: ValueRepresentable,
     F: Fn(&Term<T>, &Term<T>) -> bool + Copy,
 {
     let t1_target = walk(mapping, term1);
@@ -444,6 +444,31 @@ where
     fresh(var, func)
 }
 
+fn unify_conditional_expression<T, F>(
+    state: State<T>,
+    lhs: &Term<T>,
+    rhs: &Term<T>,
+    condition_func: F,
+) -> Stream<T>
+where
+    T: ValueRepresentable,
+    F: Fn(&Term<T>, &Term<T>) -> bool + Copy,
+{
+    let sub_mapping = state.as_ref();
+    let unified_mapping = unify(sub_mapping, lhs, rhs, condition_func);
+
+    // Return an empty stream if the mapping is `None`.
+    if let Some(term_mapping) = unified_mapping {
+        vec![State::new(
+            state.occurence_counter,
+            term_mapping,
+            state.repr_mapping,
+        )]
+    } else {
+        Stream::new()
+    }
+}
+
 /// A `Goal` that maps an equality relationship between two `Term`s.
 ///
 /// # Examples
@@ -490,22 +515,7 @@ impl<T: ValueRepresentable> Equal<T> {
 
 impl<T: VarRepresentable> Goal<T> for Equal<T> {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        let term1 = &self.term1;
-        let term2 = &self.term2;
-
-        let sub_mapping = state.as_ref();
-        let unified_mapping = unify(sub_mapping, term1, term2, |lhs, rhs| lhs == rhs);
-
-        // Return an empty stream if the mapping is `None`.
-        if let Some(term_mapping) = unified_mapping {
-            vec![State::new(
-                state.occurence_counter,
-                term_mapping,
-                state.repr_mapping,
-            )]
-        } else {
-            Stream::new()
-        }
+        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs == rhs)
     }
 }
 
@@ -624,22 +634,7 @@ where
     T: VarRepresentable + PartialOrd,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        let term1 = &self.term1;
-        let term2 = &self.term2;
-
-        let sub_mapping = state.as_ref();
-        let unified_mapping = unify(sub_mapping, term1, term2, |lhs, rhs| lhs < rhs);
-
-        // Return an empty stream if the mapping is `None`.
-        if let Some(term_mapping) = unified_mapping {
-            vec![State::new(
-                state.occurence_counter,
-                term_mapping,
-                state.repr_mapping,
-            )]
-        } else {
-            Stream::new()
-        }
+        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs < rhs)
     }
 }
 
@@ -673,6 +668,109 @@ where
     LessThan<T>: Goal<T>,
 {
     LessThan::new(term1, term2)
+}
+
+/// A `Goal` that maps an less-than or equal-to relationship between two
+/// `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_is_less_than_or_equal_to = |max: u8| {
+///     fresh('x', move |x| {
+///         conjunction(
+///             disjunction(
+///                 equal(var_term!(x), value_term!(1)),
+///                 equal(var_term!(x), value_term!(2)),
+///             ),
+///             LessEqual::new(var_term!(x), value_term!(max)),
+///         )
+///     })
+/// };
+/// let stream = x_is_less_than_or_equal_to(2).apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+/// assert_eq!(res.len(), 2);
+/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// ```
+#[derive(Debug)]
+pub struct LessEqual<T: ValueRepresentable + PartialOrd> {
+    term1: Term<T>,
+    term2: Term<T>,
+}
+
+impl<T: ValueRepresentable + PartialOrd> LessEqual<T> {
+    /// Instantiate a new `<=` relationship between two terms.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let x_is_less_than_or_equal_to = |max: u8| {
+    ///     fresh('x', move |x| {
+    ///         conjunction(
+    ///             disjunction(
+    ///                 equal(var_term!(x), value_term!(1)),
+    ///                 equal(var_term!(x), value_term!(2)),
+    ///             ),
+    ///             LessEqual::new(var_term!(x), value_term!(max)),
+    ///         )
+    ///     })
+    /// };
+    /// let stream = x_is_less_than_or_equal_to(2).apply(State::<u8>::empty());
+    /// let x_var = 'x'.to_var_repr(0);
+    /// let res = stream.run(&var_term!(x_var));
+    /// assert_eq!(res.len(), 2);
+    /// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+    /// ```
+    pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
+        Self { term1, term2 }
+    }
+}
+
+impl<T> Goal<T> for LessEqual<T>
+where
+    T: VarRepresentable + PartialOrd,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs <= rhs)
+    }
+}
+
+/// Defines an less-than or equal-to `<=` relationship mapping between two
+/// `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_is_less_than_or_equal_to = |max: u8| {
+///     fresh('x', move |x| {
+///         conjunction(
+///             disjunction(
+///                 equal(var_term!(x), value_term!(1)),
+///                 equal(var_term!(x), value_term!(2)),
+///             ),
+///             less_than_or_equal_to(var_term!(x), value_term!(max)),
+///         )
+///     })
+/// };
+/// let stream = x_is_less_than_or_equal_to(2).apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+/// assert_eq!(res.len(), 2);
+/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// ```
+pub fn less_than_or_equal_to<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable + PartialOrd,
+    LessEqual<T>: Goal<T>,
+{
+    LessEqual::new(term1, term2)
 }
 
 /// A `Goal` that maps an greater-than relationship between two `Term`s.
@@ -740,22 +838,7 @@ where
     T: VarRepresentable + PartialOrd,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        let term1 = &self.term1;
-        let term2 = &self.term2;
-
-        let sub_mapping = state.as_ref();
-        let unified_mapping = unify(sub_mapping, term1, term2, |lhs, rhs| lhs > rhs);
-
-        // Return an empty stream if the mapping is `None`.
-        if let Some(term_mapping) = unified_mapping {
-            vec![State::new(
-                state.occurence_counter,
-                term_mapping,
-                state.repr_mapping,
-            )]
-        } else {
-            Stream::new()
-        }
+        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs > rhs)
     }
 }
 
@@ -789,6 +872,109 @@ where
     GreaterThan<T>: Goal<T>,
 {
     GreaterThan::new(term1, term2)
+}
+
+/// A `Goal` that maps an greater-than or equal-to relationship between two
+/// `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_is_greater_than = |min: u8| {
+///     fresh('x', move |x| {
+///         conjunction(
+///             disjunction(
+///                 equal(var_term!(x), value_term!(1)),
+///                 equal(var_term!(x), value_term!(2)),
+///             ),
+///             GreaterEqual::new(var_term!(x), value_term!(min)),
+///         )
+///     })
+/// };
+/// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+/// assert_eq!(res.len(), 2);
+/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// ```
+#[derive(Debug)]
+pub struct GreaterEqual<T: ValueRepresentable + PartialOrd> {
+    term1: Term<T>,
+    term2: Term<T>,
+}
+
+impl<T: ValueRepresentable + PartialOrd> GreaterEqual<T> {
+    /// Instantiate a new `>=` relationship between two `Term`s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let x_is_greater_than = |min: u8| {
+    ///     fresh('x', move |x| {
+    ///         conjunction(
+    ///             disjunction(
+    ///                 equal(var_term!(x), value_term!(1)),
+    ///                 equal(var_term!(x), value_term!(2)),
+    ///             ),
+    ///             GreaterEqual::new(var_term!(x), value_term!(min)),
+    ///         )
+    ///     })
+    /// };
+    /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
+    /// let x_var = 'x'.to_var_repr(0);
+    /// let res = stream.run(&var_term!(x_var));
+    /// assert_eq!(res.len(), 2);
+    /// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+    /// ```
+    pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
+        Self { term1, term2 }
+    }
+}
+
+impl<T> Goal<T> for GreaterEqual<T>
+where
+    T: VarRepresentable + PartialOrd,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs >= rhs)
+    }
+}
+
+/// Defines an greater-than or equal-to `>=` relationship mapping between two
+/// `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_is_greater_than = |min: u8| {
+///     fresh('x', move |x| {
+///         conjunction(
+///             disjunction(
+///                 equal(var_term!(x), value_term!(1)),
+///                 equal(var_term!(x), value_term!(2)),
+///             ),
+///             greater_than_or_equal_to(var_term!(x), value_term!(min)),
+///         )
+///     })
+/// };
+/// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+/// assert_eq!(res.len(), 2);
+/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// ```
+pub fn greater_than_or_equal_to<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable + PartialOrd,
+    GreaterEqual<T>: Goal<T>,
+{
+    GreaterEqual::new(term1, term2)
 }
 
 /// A `Goal` that maps a disjunction relationship between two `Term`s.
