@@ -1,2 +1,2 @@
 # kannery
-a small µKanren utility
+A small µKanren-inspired utility.
