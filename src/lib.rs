@@ -281,8 +281,6 @@ where
 }
 
 /// Resolve a variable against a set of states, returning all possible values.
-///
-/// # Examples
 pub fn run<T>(stream: &Stream<T>, term: &Term<T>) -> Vec<Term<T>>
 where
     T: VarRepresentable,
@@ -344,6 +342,7 @@ where
 /// within a relationship mapping.
 ///
 /// # Examples
+///
 /// ```
 /// use kannery::*;
 ///
@@ -375,6 +374,7 @@ where
     /// function for use in generating a `Goal`.
     ///
     /// # Examples
+    ///
     /// ```
     /// use kannery::*;
     ///
@@ -407,6 +407,7 @@ where
 /// Instantiates a new variable for use in a goal.
 ///
 /// # Examples
+///
 /// ```
 /// use kannery::*;
 ///
@@ -428,6 +429,7 @@ where
 /// A shorthand alias to [fresh].
 ///
 /// # Examples
+///
 /// ```
 /// use kannery::*;
 ///
@@ -472,6 +474,7 @@ where
 /// A `Goal` that maps an equality relationship between two `Term`s.
 ///
 /// # Examples
+///
 /// ```
 /// use kannery::*;
 ///
@@ -495,6 +498,7 @@ impl<T: ValueRepresentable> Equal<T> {
     /// Instantiate a new `Equality` relationship between two terms.
     ///
     /// # Examples
+    ///
     /// ```
     /// use kannery::*;
     ///
@@ -522,6 +526,7 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
 /// Defines an equality relationship mapping between two `Term`s.
 ///
 /// # Examples
+///
 /// ```
 /// use kannery::*;
 ///
@@ -548,6 +553,7 @@ where
 /// A shorthand alias to [equal].
 ///
 /// # Examples
+///
 /// ```
 /// use kannery::*;
 ///
@@ -567,6 +573,134 @@ where
     Equal<T>: Goal<T>,
 {
     equal(term1, term2)
+}
+
+/// A `Goal` that maps an non-equality relationship between two `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     conjunction(
+///         disjunction(
+///             equal(var_term!(x), value_term!(1)),
+///             equal(var_term!(x), value_term!(2))
+///         ),
+///         NotEqual::new(var_term!(x), value_term!(1))
+///     )
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// ```
+#[derive(Debug)]
+pub struct NotEqual<T: ValueRepresentable> {
+    term1: Term<T>,
+    term2: Term<T>,
+}
+
+impl<T: ValueRepresentable> NotEqual<T> {
+    /// Instantiate a new `NotEquality` relationship between two terms.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let x_equals = fresh('x', |x| {
+    ///     conjunction(
+    ///         disjunction(
+    ///             equal(var_term!(x), value_term!(1)),
+    ///             equal(var_term!(x), value_term!(2))
+    ///         ),
+    ///         NotEqual::new(var_term!(x), value_term!(1))
+    ///     )
+    /// });
+    /// let stream = x_equals.apply(State::<u8>::empty());
+    /// let x_var = 'x'.to_var_repr(0);
+    /// let res = stream.run(&var_term!(x_var));
+    ///
+    /// assert_eq!(res.len(), 1);
+    /// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+    /// ```
+    pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
+        Self { term1, term2 }
+    }
+}
+
+impl<T: VarRepresentable> Goal<T> for NotEqual<T> {
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        unify_conditional_expression(state, &self.term1, &self.term2, |lhs, rhs| lhs != rhs)
+    }
+}
+
+/// Defines an non-equality relationship mapping between two `Term`s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     conjunction(
+///         disjunction(
+///             equal(var_term!(x), value_term!(1)),
+///             equal(var_term!(x), value_term!(2))
+///         ),
+///         not_equal(var_term!(x), value_term!(1))
+///     )
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// ```
+pub fn not_equal<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    NotEqual<T>: Goal<T>,
+{
+    NotEqual::new(term1, term2)
+}
+
+/// Defines an equality relationship mapping between two `Term`s.
+///
+/// A shorthand alias to [equal].
+///
+/// # Examples
+///
+/// ```
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     conjunction(
+///         disjunction(
+///             equal(var_term!(x), value_term!(1)),
+///             equal(var_term!(x), value_term!(2))
+///         ),
+///         neq(var_term!(x), value_term!(1))
+///     )
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&var_term!(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// ```
+pub fn neq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    NotEqual<T>: Goal<T>,
+{
+    not_equal(term1, term2)
 }
 
 /// A `Goal` that maps an less-than relationship between two `Term`s.
@@ -1017,6 +1151,7 @@ where
     /// Instantiate a new `Disjunction` relationship between two terms.
     ///
     /// # Examples
+    ///
     /// ```
     /// use kannery::*;
     ///
