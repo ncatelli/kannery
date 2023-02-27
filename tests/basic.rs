@@ -1,5 +1,18 @@
 use kannery::*;
 
+fn sort_values(res: Vec<Term<&str>>) -> Vec<String> {
+    let mut elements = res
+        .into_iter()
+        .flat_map(|term| match term {
+            Term::Value(val) => Some(val.to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    elements.sort();
+    elements
+}
+
 #[test]
 fn should_return_multiple_relations() {
     let parent_fn = |parent: Term<_>, child: Term<_>| {
@@ -10,50 +23,37 @@ fn should_return_multiple_relations() {
         let abe = value_term!("Abe");
         let jackie = value_term!("Jackie");
 
-        disjunction(
-            eq(
+        either(
+            equal(
                 cons_term!(parent.clone(), child.clone()),
                 cons_term!(homer.clone(), bart.clone()),
             ),
-            disjunction(
-                eq(
+            either(
+                equal(
                     cons_term!(parent.clone(), child.clone()),
                     cons_term!(homer.clone(), lisa.clone()),
                 ),
-                disjunction(
-                    eq(
+                either(
+                    equal(
                         cons_term!(parent.clone(), child.clone()),
                         cons_term!(marge.clone(), bart),
                     ),
-                    disjunction(
-                        eq(
+                    either(
+                        equal(
                             cons_term!(parent.clone(), child.clone()),
                             cons_term!(marge.clone(), lisa),
                         ),
-                        disjunction(
-                            eq(
+                        either(
+                            equal(
                                 cons_term!(parent.clone(), child.clone()),
                                 cons_term!(abe, homer),
                             ),
-                            eq(cons_term!(parent, child), cons_term!(jackie, marge)),
+                            equal(cons_term!(parent, child), cons_term!(jackie, marge)),
                         ),
                     ),
                 ),
             ),
         )
-    };
-
-    let sorted_value_strings = |res: Vec<Term<&str>>| {
-        let mut elements = res
-            .into_iter()
-            .flat_map(|term| match term {
-                Term::Value(val) => Some(val.to_string()),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        elements.sort();
-        elements
     };
 
     let children_of_homer = fresh("child", |child| {
@@ -64,7 +64,7 @@ fn should_return_multiple_relations() {
     let res = stream.run(&var_term!(child_var));
 
     assert_eq!(stream.len(), 2, "{:?}", res);
-    let sorted_children = sorted_value_strings(res);
+    let sorted_children = sort_values(res);
     assert_eq!(
         ["Bart".to_string(), "Lisa".to_string()].as_slice(),
         sorted_children.as_slice()
@@ -79,7 +79,7 @@ fn should_return_multiple_relations() {
     let res = stream.run(&Term::Var(parent_var));
 
     assert_eq!(stream.len(), 2, "{:?}", res);
-    let sorted_parents = sorted_value_strings(res);
+    let sorted_parents = sort_values(res);
 
     assert_eq!(
         ["Homer".to_string(), "Marge".to_string()].as_slice(),
@@ -97,50 +97,37 @@ fn should_define_relations_without_fresh() {
         let abe = value_term!("Abe");
         let jackie = value_term!("Jackie");
 
-        disjunction(
-            eq(
+        either(
+            equal(
                 cons_term!(parent.clone(), child.clone()),
                 cons_term!(homer.clone(), bart.clone()),
             ),
-            disjunction(
-                eq(
+            either(
+                equal(
                     cons_term!(parent.clone(), child.clone()),
                     cons_term!(homer.clone(), lisa.clone()),
                 ),
-                disjunction(
-                    eq(
+                either(
+                    equal(
                         cons_term!(parent.clone(), child.clone()),
                         cons_term!(marge.clone(), bart),
                     ),
-                    disjunction(
-                        eq(
+                    either(
+                        equal(
                             cons_term!(parent.clone(), child.clone()),
                             cons_term!(marge.clone(), lisa),
                         ),
-                        disjunction(
-                            eq(
+                        either(
+                            equal(
                                 cons_term!(parent.clone(), child.clone()),
                                 cons_term!(abe, homer),
                             ),
-                            eq(cons_term!(parent, child), cons_term!(jackie, marge)),
+                            equal(cons_term!(parent, child), cons_term!(jackie, marge)),
                         ),
                     ),
                 ),
             ),
         )
-    };
-
-    let sorted_value_strings = |res: Vec<Term<&str>>| {
-        let mut elements = res
-            .into_iter()
-            .flat_map(|term| match term {
-                Term::Value(val) => Some(val.to_string()),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        elements.sort();
-        elements
     };
 
     let mut state = State::empty();
@@ -150,7 +137,7 @@ fn should_define_relations_without_fresh() {
     let res = stream.run(&Term::Var(child));
 
     assert_eq!(stream.len(), 2, "{:?}", res);
-    let sorted_children = sorted_value_strings(res);
+    let sorted_children = sort_values(res);
     assert_eq!(
         ["Bart".to_string(), "Lisa".to_string()].as_slice(),
         sorted_children.as_slice()
@@ -164,7 +151,7 @@ fn should_define_relations_without_fresh() {
     let res = stream.run(&var_term!(parent));
 
     assert_eq!(stream.len(), 2, "{:?}", res);
-    let sorted_parents = sorted_value_strings(res);
+    let sorted_parents = sort_values(res);
 
     assert_eq!(
         ["Homer".to_string(), "Marge".to_string()].as_slice(),
