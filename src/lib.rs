@@ -56,14 +56,56 @@ pub enum Term<T: ValueRepresentable> {
 }
 
 impl<T: ValueRepresentable> Term<T> {
+    /// Instantiates a new `Term::Var` variant from a var.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let var = 0_u8.to_var_repr(0);  
+    /// let term = Term::<u8>::var(var);
+    ///
+    /// assert_eq!(Term::Var(var), term);
+    /// ```
     pub fn var(var: Var) -> Self {
         Term::Var(var)
     }
 
+    /// Instantiates a new `Term::Value` variant from a value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use std::rc::Rc;
+    ///
+    /// let term = Term::value(0_u8);
+    ///
+    /// assert_eq!(term, Term::Value(Rc::new(0_u8)));
+    /// ```
     pub fn value(val: T) -> Self {
         Term::Value(std::rc::Rc::new(val))
     }
 
+    /// Instantiates a new `Term::cons` variant from two `Term`s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use std::rc::Rc;
+    ///
+    /// let term1 = Term::value(0_u8);
+    /// let term2 = Term::value(1_u8);
+    ///
+    /// let expected = Term::Cons(
+    ///     Box::new(Term::Value(Rc::new(0))),
+    ///     Box::new(Term::Value(Rc::new(1)))
+    /// );
+    ///
+    /// assert_eq!(Term::cons(term1, term2), expected);
+    /// ```
     pub fn cons(head: Self, tail: Self) -> Self {
         Term::Cons(Box::new(head), Box::new(tail))
     }
