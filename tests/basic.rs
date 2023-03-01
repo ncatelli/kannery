@@ -16,39 +16,39 @@ fn sort_values(res: Vec<Term<&str>>) -> Vec<String> {
 #[test]
 fn should_return_multiple_relations() {
     let parent_fn = |parent: Term<_>, child: Term<_>| {
-        let homer = value_term!("Homer");
-        let marge = value_term!("Marge");
-        let bart = value_term!("Bart");
-        let lisa = value_term!("Lisa");
-        let abe = value_term!("Abe");
-        let jackie = value_term!("Jackie");
+        let homer = Term::value("Homer");
+        let marge = Term::value("Marge");
+        let bart = Term::value("Bart");
+        let lisa = Term::value("Lisa");
+        let abe = Term::value("Abe");
+        let jackie = Term::value("Jackie");
 
         either(
             equal(
-                cons_term!(parent.clone(), child.clone()),
-                cons_term!(homer.clone(), bart.clone()),
+                Term::cons(parent.clone(), child.clone()),
+                Term::cons(homer.clone(), bart.clone()),
             ),
             either(
                 equal(
-                    cons_term!(parent.clone(), child.clone()),
-                    cons_term!(homer.clone(), lisa.clone()),
+                    Term::cons(parent.clone(), child.clone()),
+                    Term::cons(homer.clone(), lisa.clone()),
                 ),
                 either(
                     equal(
-                        cons_term!(parent.clone(), child.clone()),
-                        cons_term!(marge.clone(), bart),
+                        Term::cons(parent.clone(), child.clone()),
+                        Term::cons(marge.clone(), bart),
                     ),
                     either(
                         equal(
-                            cons_term!(parent.clone(), child.clone()),
-                            cons_term!(marge.clone(), lisa),
+                            Term::cons(parent.clone(), child.clone()),
+                            Term::cons(marge.clone(), lisa),
                         ),
                         either(
                             equal(
-                                cons_term!(parent.clone(), child.clone()),
-                                cons_term!(abe, homer),
+                                Term::cons(parent.clone(), child.clone()),
+                                Term::cons(abe, homer),
                             ),
-                            equal(cons_term!(parent, child), cons_term!(jackie, marge)),
+                            equal(Term::cons(parent, child), Term::cons(jackie, marge)),
                         ),
                     ),
                 ),
@@ -57,11 +57,11 @@ fn should_return_multiple_relations() {
     };
 
     let children_of_homer = fresh("child", |child| {
-        parent_fn(value_term!("Homer"), var_term!(child))
+        parent_fn(Term::value("Homer"), Term::var(child))
     });
     let stream = children_of_homer.apply(State::empty());
     let child_var = "child".to_var_repr(0);
-    let res = stream.run(&var_term!(child_var));
+    let res = stream.run(&Term::var(child_var));
 
     assert_eq!(stream.len(), 2, "{:?}", res);
     let sorted_children = sort_values(res);
@@ -72,7 +72,7 @@ fn should_return_multiple_relations() {
 
     // map parent relationship
     let parents_of_lisa = fresh("parent", |parent| {
-        parent_fn(var_term!(parent), value_term!("Lisa"))
+        parent_fn(Term::var(parent), Term::value("Lisa"))
     });
     let stream = parents_of_lisa.apply(State::empty());
     let parent_var = "parent".to_var_repr(0);
@@ -90,39 +90,39 @@ fn should_return_multiple_relations() {
 #[test]
 fn should_define_relations_without_fresh() {
     let parent_fn = |parent: Term<_>, child: Term<_>| {
-        let homer = value_term!("Homer");
-        let marge = value_term!("Marge");
-        let bart = value_term!("Bart");
-        let lisa = value_term!("Lisa");
-        let abe = value_term!("Abe");
-        let jackie = value_term!("Jackie");
+        let homer = Term::value("Homer");
+        let marge = Term::value("Marge");
+        let bart = Term::value("Bart");
+        let lisa = Term::value("Lisa");
+        let abe = Term::value("Abe");
+        let jackie = Term::value("Jackie");
 
         either(
             equal(
-                cons_term!(parent.clone(), child.clone()),
-                cons_term!(homer.clone(), bart.clone()),
+                Term::cons(parent.clone(), child.clone()),
+                Term::cons(homer.clone(), bart.clone()),
             ),
             either(
                 equal(
-                    cons_term!(parent.clone(), child.clone()),
-                    cons_term!(homer.clone(), lisa.clone()),
+                    Term::cons(parent.clone(), child.clone()),
+                    Term::cons(homer.clone(), lisa.clone()),
                 ),
                 either(
                     equal(
-                        cons_term!(parent.clone(), child.clone()),
-                        cons_term!(marge.clone(), bart),
+                        Term::cons(parent.clone(), child.clone()),
+                        Term::cons(marge.clone(), bart),
                     ),
                     either(
                         equal(
-                            cons_term!(parent.clone(), child.clone()),
-                            cons_term!(marge.clone(), lisa),
+                            Term::cons(parent.clone(), child.clone()),
+                            Term::cons(marge.clone(), lisa),
                         ),
                         either(
                             equal(
-                                cons_term!(parent.clone(), child.clone()),
-                                cons_term!(abe, homer),
+                                Term::cons(parent.clone(), child.clone()),
+                                Term::cons(abe, homer),
                             ),
-                            equal(cons_term!(parent, child), cons_term!(jackie, marge)),
+                            equal(Term::cons(parent, child), Term::cons(jackie, marge)),
                         ),
                     ),
                 ),
@@ -132,7 +132,7 @@ fn should_define_relations_without_fresh() {
 
     let mut state = State::empty();
     let child = state.declare("child");
-    let children_of_homer = || parent_fn(value_term!("Homer"), var_term!(child));
+    let children_of_homer = || parent_fn(Term::value("Homer"), Term::var(child));
     let stream = children_of_homer().apply(state);
     let res = stream.run(&Term::Var(child));
 
@@ -146,9 +146,9 @@ fn should_define_relations_without_fresh() {
     // map parent relationship
     let mut state = State::empty();
     let parent = state.declare("parent");
-    let parents_of_lisa = parent_fn(var_term!(parent), value_term!("Lisa"));
+    let parents_of_lisa = parent_fn(Term::var(parent), Term::value("Lisa"));
     let stream = parents_of_lisa.apply(state);
-    let res = stream.run(&var_term!(parent));
+    let res = stream.run(&Term::var(parent));
 
     assert_eq!(stream.len(), 2, "{:?}", res);
     let sorted_parents = sort_values(res);

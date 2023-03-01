@@ -1,30 +1,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-/// A helper macro for creating a `Rc`-wrapped `Term::Value` variant.
-#[macro_export]
-macro_rules! value_term {
-    ($v:expr) => {
-        $crate::Term::Value(std::rc::Rc::new($v))
-    };
-}
-
-/// A helper macro for creating a `Term::Var` variant.
-#[macro_export]
-macro_rules! var_term {
-    ($var:expr) => {
-        $crate::Term::Var($var)
-    };
-}
-
-/// A helper macro for creating a `Term::Cons` variant from two sub-`Term`s.
-#[macro_export]
-macro_rules! cons_term {
-    ($head:expr, $tail:expr) => {
-        $crate::Term::Cons(Box::new($head), Box::new($tail))
-    };
-}
-
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
     fn to_var_repr(&self, count: usize) -> Var {
@@ -79,9 +55,65 @@ pub enum Term<T: ValueRepresentable> {
     Cons(Box<Term<T>>, Box<Term<T>>),
 }
 
+impl<T: ValueRepresentable> Term<T> {
+    /// Instantiates a new `Term::Var` variant from a var.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    ///
+    /// let var = 0_u8.to_var_repr(0);  
+    /// let term = Term::<u8>::var(var);
+    ///
+    /// assert_eq!(Term::Var(var), term);
+    /// ```
+    pub fn var(var: Var) -> Self {
+        Term::Var(var)
+    }
+
+    /// Instantiates a new `Term::Value` variant from a value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use std::rc::Rc;
+    ///
+    /// let term = Term::value(0_u8);
+    ///
+    /// assert_eq!(term, Term::Value(Rc::new(0_u8)));
+    /// ```
+    pub fn value(val: T) -> Self {
+        Term::Value(std::rc::Rc::new(val))
+    }
+
+    /// Instantiates a new `Term::cons` variant from two `Term`s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use std::rc::Rc;
+    ///
+    /// let term1 = Term::value(0_u8);
+    /// let term2 = Term::value(1_u8);
+    ///
+    /// let expected = Term::Cons(
+    ///     Box::new(Term::Value(Rc::new(0))),
+    ///     Box::new(Term::Value(Rc::new(1)))
+    /// );
+    ///
+    /// assert_eq!(Term::cons(term1, term2), expected);
+    /// ```
+    pub fn cons(head: Self, tail: Self) -> Self {
+        Term::Cons(Box::new(head), Box::new(tail))
+    }
+}
+
 impl<T: ValueRepresentable> From<(Term<T>, Term<T>)> for Term<T> {
     fn from((head, tail): (Term<T>, Term<T>)) -> Self {
-        cons_term!(head, tail)
+        Term::cons(head, tail)
     }
 }
 
@@ -255,7 +287,7 @@ impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
             let head_ref = self.walk(head.as_ref());
             let tail_ref = self.walk(tail.as_ref());
 
-            cons_term!(head_ref, tail_ref)
+            Term::cons(head_ref, tail_ref)
         } else {
             term
         }
@@ -347,7 +379,7 @@ where
 /// use kannery::*;
 ///
 /// let _x_equals = Fresh::new("x", |x| {
-///     eq(var_term!(x), value_term!(1))
+///     eq(Term::var(x), Term::value(1))
 /// });
 /// ```
 #[derive(Debug)]
@@ -379,7 +411,7 @@ where
     /// use kannery::*;
     ///
     /// let _x_equals = Fresh::new("x", |x| {
-    ///     eq(var_term!(x), value_term!(1))
+    ///     eq(Term::var(x), Term::value(1))
     /// });
     /// ```
     pub fn new(var_id: V, func: F) -> Self {
@@ -412,7 +444,7 @@ where
 /// use kannery::*;
 ///
 /// let _x_equals = fresh("x", |x| {
-///     eq(var_term!(x), value_term!(1))
+///     eq(Term::var(x), Term::value(1))
 /// });
 /// ```
 pub fn fresh<T, V, GO>(var: V, func: impl Fn(Var) -> GO) -> impl Goal<T>
@@ -434,7 +466,7 @@ where
 /// use kannery::*;
 ///
 /// let _x_equals = declare("x", |x| {
-///     eq(var_term!(x), value_term!(1))
+///     eq(Term::var(x), Term::value(1))
 /// });
 /// ```
 pub fn declare<T, V, GO>(var: V, func: impl Fn(Var) -> GO) -> impl Goal<T>
@@ -479,14 +511,14 @@ where
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
-///     Equal::new(var_term!(x), value_term!(1))
+///     Equal::new(Term::var(x), Term::value(1))
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 #[derive(Debug)]
 pub struct Equal<T: ValueRepresentable> {
@@ -503,14 +535,14 @@ impl<T: ValueRepresentable> Equal<T> {
     /// use kannery::*;
     ///
     /// let x_equals = fresh('x', |x| {
-    ///     Equal::new(var_term!(x), value_term!(1))
+    ///     Equal::new(Term::var(x), Term::value(1))
     /// });
     /// let stream = x_equals.apply(State::<u8>::empty());
     /// let x_var = 'x'.to_var_repr(0);
-    /// let res = stream.run(&var_term!(x_var));
+    /// let res = stream.run(&Term::var(x_var));
     ///
     /// assert_eq!(res.len(), 1);
-    /// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+    /// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
     /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
@@ -531,14 +563,14 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
-///     equal(var_term!(x), value_term!(1))
+///     equal(Term::var(x), Term::value(1))
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 pub fn equal<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -558,14 +590,14 @@ where
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
-///     eq(var_term!(x), value_term!(1))
+///     eq(Term::var(x), Term::value(1))
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 pub fn eq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -585,18 +617,18 @@ where
 /// let x_equals = fresh('x', |x| {
 ///     conjunction(
 ///         disjunction(
-///             equal(var_term!(x), value_term!(1)),
-///             equal(var_term!(x), value_term!(2))
+///             equal(Term::var(x), Term::value(1)),
+///             equal(Term::var(x), Term::value(2))
 ///         ),
-///         NotEqual::new(var_term!(x), value_term!(1))
+///         NotEqual::new(Term::var(x), Term::value(1))
 ///     )
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
 /// ```
 #[derive(Debug)]
 pub struct NotEqual<T: ValueRepresentable> {
@@ -615,18 +647,18 @@ impl<T: ValueRepresentable> NotEqual<T> {
     /// let x_equals = fresh('x', |x| {
     ///     conjunction(
     ///         disjunction(
-    ///             equal(var_term!(x), value_term!(1)),
-    ///             equal(var_term!(x), value_term!(2))
+    ///             equal(Term::var(x), Term::value(1)),
+    ///             equal(Term::var(x), Term::value(2))
     ///         ),
-    ///         NotEqual::new(var_term!(x), value_term!(1))
+    ///         NotEqual::new(Term::var(x), Term::value(1))
     ///     )
     /// });
     /// let stream = x_equals.apply(State::<u8>::empty());
     /// let x_var = 'x'.to_var_repr(0);
-    /// let res = stream.run(&var_term!(x_var));
+    /// let res = stream.run(&Term::var(x_var));
     ///
     /// assert_eq!(res.len(), 1);
-    /// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+    /// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
     /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
@@ -649,18 +681,18 @@ impl<T: VarRepresentable> Goal<T> for NotEqual<T> {
 /// let x_equals = fresh('x', |x| {
 ///     conjunction(
 ///         disjunction(
-///             equal(var_term!(x), value_term!(1)),
-///             equal(var_term!(x), value_term!(2))
+///             equal(Term::var(x), Term::value(1)),
+///             equal(Term::var(x), Term::value(2))
 ///         ),
-///         not_equal(var_term!(x), value_term!(1))
+///         not_equal(Term::var(x), Term::value(1))
 ///     )
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn not_equal<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -682,18 +714,18 @@ where
 /// let x_equals = fresh('x', |x| {
 ///     conjunction(
 ///         disjunction(
-///             equal(var_term!(x), value_term!(1)),
-///             equal(var_term!(x), value_term!(2))
+///             equal(Term::var(x), Term::value(1)),
+///             equal(Term::var(x), Term::value(2))
 ///         ),
-///         neq(var_term!(x), value_term!(1))
+///         neq(Term::var(x), Term::value(1))
 ///     )
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn neq<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -714,18 +746,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             LessThan::new(var_term!(x), value_term!(max)),
+///             LessThan::new(Term::var(x), Term::value(max)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_less_than(2).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 #[derive(Debug)]
 pub struct LessThan<T: ValueRepresentable + PartialOrd> {
@@ -745,18 +777,18 @@ impl<T: ValueRepresentable + PartialOrd> LessThan<T> {
     ///     fresh('x', move |x| {
     ///         conjunction(
     ///             disjunction(
-    ///                 equal(var_term!(x), value_term!(1)),
-    ///                 equal(var_term!(x), value_term!(2)),
+    ///                 equal(Term::var(x), Term::value(1)),
+    ///                 equal(Term::var(x), Term::value(2)),
     ///             ),
-    ///             LessThan::new(var_term!(x), value_term!(max)),
+    ///             LessThan::new(Term::var(x), Term::value(max)),
     ///         )
     ///     })
     /// };
     /// let stream = x_is_less_than(2).apply(State::<u8>::empty());
     /// let x_var = 'x'.to_var_repr(0);
-    /// let res = stream.run(&var_term!(x_var));
+    /// let res = stream.run(&Term::var(x_var));
     /// assert_eq!(res.len(), 1);
-    /// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+    /// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
     /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
@@ -783,18 +815,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             less_than(var_term!(x), value_term!(max)),
+///             less_than(Term::var(x), Term::value(max)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_less_than(2).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 pub fn less_than<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -816,18 +848,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             LessEqual::new(var_term!(x), value_term!(max)),
+///             LessEqual::new(Term::var(x), Term::value(max)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_less_than_or_equal_to(2).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 #[derive(Debug)]
 pub struct LessEqual<T: ValueRepresentable + PartialOrd> {
@@ -847,18 +879,18 @@ impl<T: ValueRepresentable + PartialOrd> LessEqual<T> {
     ///     fresh('x', move |x| {
     ///         conjunction(
     ///             disjunction(
-    ///                 equal(var_term!(x), value_term!(1)),
-    ///                 equal(var_term!(x), value_term!(2)),
+    ///                 equal(Term::var(x), Term::value(1)),
+    ///                 equal(Term::var(x), Term::value(2)),
     ///             ),
-    ///             LessEqual::new(var_term!(x), value_term!(max)),
+    ///             LessEqual::new(Term::var(x), Term::value(max)),
     ///         )
     ///     })
     /// };
     /// let stream = x_is_less_than_or_equal_to(2).apply(State::<u8>::empty());
     /// let x_var = 'x'.to_var_repr(0);
-    /// let res = stream.run(&var_term!(x_var));
+    /// let res = stream.run(&Term::var(x_var));
     /// assert_eq!(res.len(), 2);
-    /// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+    /// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
     /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
@@ -886,18 +918,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             less_than_or_equal_to(var_term!(x), value_term!(max)),
+///             less_than_or_equal_to(Term::var(x), Term::value(max)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_less_than_or_equal_to(2).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn less_than_or_equal_to<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -918,18 +950,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             GreaterThan::new(var_term!(x), value_term!(min)),
+///             GreaterThan::new(Term::var(x), Term::value(min)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
 /// ```
 #[derive(Debug)]
 pub struct GreaterThan<T: ValueRepresentable + PartialOrd> {
@@ -949,18 +981,18 @@ impl<T: ValueRepresentable + PartialOrd> GreaterThan<T> {
     ///     fresh('x', move |x| {
     ///         conjunction(
     ///             disjunction(
-    ///                 equal(var_term!(x), value_term!(1)),
-    ///                 equal(var_term!(x), value_term!(2)),
+    ///                 equal(Term::var(x), Term::value(1)),
+    ///                 equal(Term::var(x), Term::value(2)),
     ///             ),
-    ///             GreaterThan::new(var_term!(x), value_term!(min)),
+    ///             GreaterThan::new(Term::var(x), Term::value(min)),
     ///         )
     ///     })
     /// };
     /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
     /// let x_var = 'x'.to_var_repr(0);
-    /// let res = stream.run(&var_term!(x_var));
+    /// let res = stream.run(&Term::var(x_var));
     /// assert_eq!(res.len(), 1);
-    /// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+    /// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
     /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
@@ -987,18 +1019,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             greater_than(var_term!(x), value_term!(min)),
+///             greater_than(Term::var(x), Term::value(min)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn greater_than<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -1020,18 +1052,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             GreaterEqual::new(var_term!(x), value_term!(min)),
+///             GreaterEqual::new(Term::var(x), Term::value(min)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 #[derive(Debug)]
 pub struct GreaterEqual<T: ValueRepresentable + PartialOrd> {
@@ -1051,18 +1083,18 @@ impl<T: ValueRepresentable + PartialOrd> GreaterEqual<T> {
     ///     fresh('x', move |x| {
     ///         conjunction(
     ///             disjunction(
-    ///                 equal(var_term!(x), value_term!(1)),
-    ///                 equal(var_term!(x), value_term!(2)),
+    ///                 equal(Term::var(x), Term::value(1)),
+    ///                 equal(Term::var(x), Term::value(2)),
     ///             ),
-    ///             GreaterEqual::new(var_term!(x), value_term!(min)),
+    ///             GreaterEqual::new(Term::var(x), Term::value(min)),
     ///         )
     ///     })
     /// };
     /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
     /// let x_var = 'x'.to_var_repr(0);
-    /// let res = stream.run(&var_term!(x_var));
+    /// let res = stream.run(&Term::var(x_var));
     /// assert_eq!(res.len(), 2);
-    /// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+    /// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
     /// ```
     pub fn new(term1: Term<T>, term2: Term<T>) -> Self {
         Self { term1, term2 }
@@ -1090,18 +1122,18 @@ where
 ///     fresh('x', move |x| {
 ///         conjunction(
 ///             disjunction(
-///                 equal(var_term!(x), value_term!(1)),
-///                 equal(var_term!(x), value_term!(2)),
+///                 equal(Term::var(x), Term::value(1)),
+///                 equal(Term::var(x), Term::value(2)),
 ///             ),
-///             greater_than_or_equal_to(var_term!(x), value_term!(min)),
+///             greater_than_or_equal_to(Term::var(x), Term::value(min)),
 ///         )
 ///     })
 /// };
 /// let stream = x_is_greater_than(1).apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn greater_than_or_equal_to<T>(term1: Term<T>, term2: Term<T>) -> impl Goal<T>
 where
@@ -1120,16 +1152,16 @@ where
 ///
 /// let x_equals = fresh('x', |x| {
 ///     Disjunction::new(
-///         equal(var_term!(x), value_term!(1)),
-///         equal(var_term!(x), value_term!(2))
+///         equal(Term::var(x), Term::value(1)),
+///         equal(Term::var(x), Term::value(2))
 ///     )
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub struct Disjunction<T, G1, G2>
 where
@@ -1156,8 +1188,8 @@ where
     /// use kannery::*;
     ///
     /// let _x_equals = Disjunction::new(
-    ///     equal(value_term!(1), value_term!(1)),
-    ///     equal(value_term!(2), value_term!(2))
+    ///     equal(Term::value(1), Term::value(1)),
+    ///     equal(Term::value(2), Term::value(2))
     /// );
     /// ```
     pub fn new(goal1: G1, goal2: G2) -> Self {
@@ -1195,16 +1227,16 @@ where
 ///
 /// let x_equals = fresh('x', |x| {
 ///     disjunction(
-///         equal(var_term!(x), value_term!(1)),
-///         equal(var_term!(x), value_term!(2))
+///         equal(Term::var(x), Term::value(1)),
+///         equal(Term::var(x), Term::value(2))
 ///     )
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn disjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
@@ -1225,16 +1257,16 @@ where
 ///
 /// let x_equals = declare('x', |x| {
 ///     either(
-///         equal(var_term!(x), value_term!(1)),
-///         equal(var_term!(x), value_term!(2))
+///         equal(Term::var(x), Term::value(1)),
+///         equal(Term::var(x), Term::value(2))
 ///     )
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 2);
-/// assert_eq!([value_term!(1), value_term!(2)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1), Term::value(2)].as_slice(), res.as_slice());
 /// ```
 pub fn either<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
@@ -1253,17 +1285,17 @@ where
 /// let x_equals = fresh('x', |x| {
 ///     fresh('y', move |y| {
 ///         Conjunction::new(
-///             equal(var_term!(x), var_term!(y)),
-///             equal(var_term!(y), value_term!(1))
+///             equal(Term::var(x), Term::var(y)),
+///             equal(Term::var(y), Term::value(1))
 ///         )
 ///     })
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 pub struct Conjunction<T, G1, G2>
 where
@@ -1317,17 +1349,17 @@ where
 /// let x_equals = fresh('x', |x| {
 ///     fresh('y', move |y| {
 ///         conjunction(
-///             equal(var_term!(x), var_term!(y)),
-///             equal(var_term!(y), value_term!(1))
+///             equal(Term::var(x), Term::var(y)),
+///             equal(Term::var(y), Term::value(1))
 ///         )
 ///     })
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 pub fn conjunction<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
@@ -1349,17 +1381,17 @@ where
 /// let x_equals = declare('x', |x| {
 ///     declare('y', move |y| {
 ///         both(
-///             equal(var_term!(x), var_term!(y)),
-///             equal(var_term!(y), value_term!(1))
+///             equal(Term::var(x), Term::var(y)),
+///             equal(Term::var(y), Term::value(1))
 ///         )
 ///     })
 /// });
 /// let stream = x_equals.apply(State::<u8>::empty());
 /// let x_var = 'x'.to_var_repr(0);
-/// let res = stream.run(&var_term!(x_var));
+/// let res = stream.run(&Term::var(x_var));
 ///
 /// assert_eq!(res.len(), 1);
-/// assert_eq!([value_term!(1)].as_slice(), res.as_slice());
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
 /// ```
 pub fn both<T>(goal1: impl Goal<T>, goal2: impl Goal<T>) -> impl Goal<T>
 where
