@@ -50,15 +50,19 @@ where
     vars: V,
     state: State<T>,
 
-    goal: GF,
+    goal_fn: GF,
 }
 
 impl<T, V, GF> Query<T, V, GF>
 where
     T: ValueRepresentable,
 {
-    pub fn new(vars: V, state: State<T>, goal: GF) -> Self {
-        Self { vars, goal, state }
+    pub fn new(vars: V, state: State<T>, goal_fn: GF) -> Self {
+        Self {
+            vars,
+            goal_fn,
+            state,
+        }
     }
 
     pub fn with_vars<NV>(self, new_var_repr: NV) -> Query<T, Join<V, Var>, GF>
@@ -67,7 +71,7 @@ where
     {
         let mut state = self.state;
         let prev_vars = self.vars;
-        let goal = self.goal;
+        let goal = self.goal_fn;
 
         let new_var = state.declare(new_var_repr);
         let joined_vars = Join::new(prev_vars, new_var);
@@ -84,7 +88,13 @@ where
     GF: Fn(OV) -> G,
 {
     fn run(&self) -> (OV, Stream<T>) {
-        todo!()
+        let vars = self.vars.pack();
+        let goal = (self.goal_fn)(vars);
+        let state = self.state.clone();
+
+        let stream = goal.apply(state);
+
+        (self.vars.pack(), stream)
     }
 }
 
