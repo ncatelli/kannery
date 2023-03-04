@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+pub mod query;
+
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
     fn to_var_repr(&self, count: usize) -> Var {
@@ -128,7 +130,7 @@ type OccurrenceCounter = HashMap<String, usize>;
 
 /// A state object for a given value that stores mappings of relationships
 /// between `Term`s.
-#[derive(Default, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct State<T: ValueRepresentable> {
     /// tracks the occurrence of a variable of a given representation.
     occurence_counter: OccurrenceCounter,
@@ -240,6 +242,12 @@ impl<T: ValueRepresentable + std::fmt::Debug> std::fmt::Debug for State<T> {
         }
 
         dm.finish()
+    }
+}
+
+impl<T: ValueRepresentable> Default for State<T> {
+    fn default() -> Self {
+        Self::empty()
     }
 }
 
