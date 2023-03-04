@@ -1,36 +1,42 @@
 use super::*;
 
-trait VarPackable<B> {
-    fn pack(&self) -> B;
+trait Unpackable<O> {
+    fn unpack(&self) -> O;
 }
 
-// functions as an identity function.
-impl VarPackable<Var> for Var {
-    fn pack(&self) -> Var {
-        *self
+// Identity function
+impl<T: ValueRepresentable> Unpackable<Term<T>> for Term<T> {
+    fn unpack(&self) -> Term<T> {
+        self.clone()
+    }
+}
+
+impl<T: ValueRepresentable> Unpackable<Term<T>> for Var {
+    fn unpack(&self) -> Term<T> {
+        Term::var(*self)
     }
 }
 
 #[derive(Debug)]
-pub struct Join<V1, V2> {
-    lvar: V1,
-    rvar: V2,
+pub struct Join<P1, P2> {
+    lvar: P1,
+    rvar: P2,
 }
 
-impl<V1, V2> Join<V1, V2> {
-    fn new(lvar: V1, rvar: V2) -> Self {
+impl<P1, P2> Join<P1, P2> {
+    fn new(lvar: P1, rvar: P2) -> Self {
         Self { lvar, rvar }
     }
 }
 
-impl<V1, V2, O1, O2> VarPackable<(O1, O2)> for Join<V1, V2>
+impl<P1, P2, O1, O2> Unpackable<(O1, O2)> for Join<P1, P2>
 where
-    V1: VarPackable<O1>,
-    V2: VarPackable<O2>,
+    P1: Unpackable<O1>,
+    P2: Unpackable<O2>,
 {
-    fn pack(&self) -> (O1, O2) {
-        let lhs = self.lvar.pack();
-        let rhs = self.rvar.pack();
+    fn unpack(&self) -> (O1, O2) {
+        let lhs = self.lvar.unpack();
+        let rhs = self.rvar.unpack();
 
         (lhs, rhs)
     }
@@ -83,18 +89,18 @@ where
 impl<OV, T, V, GF, G> Runnable<OV, T> for Query<T, V, GF>
 where
     T: ValueRepresentable,
-    V: VarPackable<OV>,
+    V: Unpackable<OV>,
     G: Goal<T>,
     GF: Fn(OV) -> G,
 {
     fn run(&self) -> (OV, Stream<T>) {
-        let vars = self.vars.pack();
+        let vars = self.vars.unpack();
         let goal = (self.goal_fn)(vars);
         let state = self.state.clone();
 
         let stream = goal.apply(state);
 
-        (self.vars.pack(), stream)
+        (self.vars.unpack(), stream)
     }
 }
 
@@ -106,9 +112,14 @@ mod tests {
     fn should_nest_joins() {
         let a = 'a'.to_var_repr(0);
         let b = 'b'.to_var_repr(0);
-        let c = 'c'.to_var_repr(0);
+        let c = Term::value(0u8);
 
-        let first_joined = Join::new(b, c);
-        let _joined = Join::new(a, first_joined);
+        let first_joined = Join::new(Term::<u8>::var(b), c.clone());
+        let joined = Join::new(a, first_joined);
+
+        let (a2, (b2, c2)): (Term<u8>, (_, _)) = joined.unpack();
+        assert!(matches!(a2, Term::Var(_)));
+        assert!(matches!(b2, Term::Var(_)));
+        assert_eq!(c2, c);
     }
 }
