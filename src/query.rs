@@ -1,6 +1,6 @@
 use super::*;
 
-trait Unpackable<O> {
+pub trait Unpackable<O> {
     type ValueKind;
 
     fn unpack(&self) -> O;
@@ -58,6 +58,10 @@ where
     fn run(&self) -> (OV, Stream<T>);
 }
 
+fn empty_goal<T: ValueRepresentable>(_: State<T>) -> Stream<T> {
+    Stream::new()
+}
+
 pub struct Query<T, V, GF>
 where
     T: ValueRepresentable,
@@ -79,8 +83,33 @@ where
             state,
         }
     }
+}
 
-    pub fn with_vars<NV>(self, new_var_repr: NV) -> Query<T, Join<V, Var>, GF>
+impl<T, GF> Query<T, (), GF>
+where
+    T: ValueRepresentable,
+    GF: Goal<T>,
+{
+    pub fn with_var<NV>(self, new_var_repr: NV) -> Query<T, Term<T>, GF>
+    where
+        NV: VarRepresentable + std::fmt::Display,
+    {
+        let mut state = self.state;
+        let goal = self.goal_fn;
+
+        let new_var = state.declare(new_var_repr);
+
+        Query::new(Term::var(new_var), state, goal)
+    }
+}
+
+impl<T, V, GF> Query<T, V, GF>
+where
+    T: ValueRepresentable,
+    GF: Goal<T>,
+    V: Unpackable<Term<T>>,
+{
+    pub fn with_var<NV>(self, new_var_repr: NV) -> Query<T, Join<V, Term<T>>, GF>
     where
         NV: VarRepresentable + std::fmt::Display,
     {
@@ -89,7 +118,8 @@ where
         let goal = self.goal_fn;
 
         let new_var = state.declare(new_var_repr);
-        let joined_vars = Join::new(prev_vars, new_var);
+        let new_var_term = Term::var(new_var);
+        let joined_vars = Join::new(prev_vars, new_var_term);
 
         Query::new(joined_vars, state, goal)
     }
@@ -113,6 +143,19 @@ where
     }
 }
 
+impl<T> Default for Query<T, (), fn(State<T>) -> Stream<T>>
+where
+    T: ValueRepresentable,
+{
+    fn default() -> Self {
+        Self {
+            vars: (),
+            goal_fn: empty_goal::<T>,
+            state: State::empty(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,5 +173,10 @@ mod tests {
         assert!(matches!(a2, Term::Var(_)));
         assert!(matches!(b2, Term::Var(_)));
         assert_eq!(c2, c);
+    }
+
+    #[test]
+    fn should_run_simple_query() {
+        let _query = Query::<u8, _, _>::default().with_var('a').with_var('b');
     }
 }
