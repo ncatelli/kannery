@@ -1,18 +1,24 @@
 use super::*;
 
 trait Unpackable<O> {
+    type ValueKind;
+
     fn unpack(&self) -> O;
 }
 
 // Identity function
 impl<T: ValueRepresentable> Unpackable<Term<T>> for Term<T> {
-    fn unpack(&self) -> Term<T> {
+    type ValueKind = T;
+
+    fn unpack(&self) -> Term<Self::ValueKind> {
         self.clone()
     }
 }
 
 impl<T: ValueRepresentable> Unpackable<Term<T>> for Var {
-    fn unpack(&self) -> Term<T> {
+    type ValueKind = T;
+
+    fn unpack(&self) -> Term<Self::ValueKind> {
         Term::var(*self)
     }
 }
@@ -29,11 +35,14 @@ impl<P1, P2> Join<P1, P2> {
     }
 }
 
-impl<P1, P2, O1, O2> Unpackable<(O1, O2)> for Join<P1, P2>
+impl<T, P1, P2, O1, O2> Unpackable<(O1, O2)> for Join<P1, P2>
 where
-    P1: Unpackable<O1>,
-    P2: Unpackable<O2>,
+    T: ValueRepresentable,
+    P1: Unpackable<O1, ValueKind = T>,
+    P2: Unpackable<O2, ValueKind = T>,
 {
+    type ValueKind = T;
+
     fn unpack(&self) -> (O1, O2) {
         let lhs = self.lvar.unpack();
         let rhs = self.rvar.unpack();
@@ -117,7 +126,7 @@ mod tests {
         let first_joined = Join::new(Term::<u8>::var(b), c.clone());
         let joined = Join::new(a, first_joined);
 
-        let (a2, (b2, c2)): (Term<u8>, (_, _)) = joined.unpack();
+        let (a2, (b2, c2)) = joined.unpack();
         assert!(matches!(a2, Term::Var(_)));
         assert!(matches!(b2, Term::Var(_)));
         assert_eq!(c2, c);
