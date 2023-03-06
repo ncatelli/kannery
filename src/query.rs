@@ -1,5 +1,10 @@
 use super::*;
 
+/// A marker trait to identify non-`()` placeholder types.
+pub trait IsNonEmptyUnpackable {}
+
+impl<T: ValueRepresentable> IsNonEmptyUnpackable for Term<T> {}
+
 pub trait Unpackable<O> {
     type ValueKind;
 
@@ -51,6 +56,14 @@ where
     }
 }
 
+impl<P1, P2> IsNonEmptyUnpackable for Join<P1, P2> {}
+
+impl<P1, P2> From<Join<P1, P2>> for (P1, P2) {
+    fn from(Join { lvar, rvar }: Join<P1, P2>) -> Self {
+        (lvar, rvar)
+    }
+}
+
 trait Runnable<OV, T>
 where
     T: ValueRepresentable,
@@ -62,11 +75,12 @@ fn empty_goal<T: ValueRepresentable>(_: State<T>) -> Stream<T> {
     Stream::new()
 }
 
+#[derive(Debug, Clone)]
 pub struct Query<T, V, GF>
 where
     T: ValueRepresentable,
 {
-    vars: V,
+    associated_terms: V,
     state: State<T>,
 
     goal_fn: GF,
@@ -78,7 +92,7 @@ where
 {
     pub fn new(vars: V, state: State<T>, goal_fn: GF) -> Self {
         Self {
-            vars,
+            associated_terms: vars,
             goal_fn,
             state,
         }
@@ -101,25 +115,52 @@ where
 
         Query::new(Term::var(new_var), state, goal)
     }
+
+    /// Takes a term and allocates it against the query.
+    ///
+    /// # Caller assumes
+    /// If a `Term::Var` is passed, this variable has already been declared against
+    /// the state. If not, use `Query::with_var` instead.
+    pub fn with_term(self, term: Term<T>) -> Query<T, Term<T>, GF> {
+        let state = self.state;
+        let goal = self.goal_fn;
+
+        Query::new(term, state, goal)
+    }
 }
 
 impl<T, V, GF> Query<T, V, GF>
 where
     T: ValueRepresentable,
     GF: Goal<T>,
-    V: Unpackable<Term<T>>,
+    V: IsNonEmptyUnpackable,
 {
     pub fn with_var<NV>(self, new_var_repr: NV) -> Query<T, Join<V, Term<T>>, GF>
     where
         NV: VarRepresentable + std::fmt::Display,
     {
         let mut state = self.state;
-        let prev_vars = self.vars;
+        let prev_vars = self.associated_terms;
         let goal = self.goal_fn;
 
         let new_var = state.declare(new_var_repr);
         let new_var_term = Term::var(new_var);
         let joined_vars = Join::new(prev_vars, new_var_term);
+
+        Query::new(joined_vars, state, goal)
+    }
+
+    /// Takes a term and allocates it against the query.
+    ///
+    /// # Caller assumes
+    /// If a `Term::Var` is passed, this variable has already been declared against
+    /// the state. If not, use `Query::with_var` instead.
+    pub fn with_term(self, term: Term<T>) -> Query<T, Join<V, Term<T>>, GF> {
+        let state = self.state;
+        let prev_terms = self.associated_terms;
+        let goal = self.goal_fn;
+
+        let joined_vars = Join::new(prev_terms, term);
 
         Query::new(joined_vars, state, goal)
     }
@@ -133,13 +174,13 @@ where
     GF: Fn(OV) -> G,
 {
     fn run(&self) -> (OV, Stream<T>) {
-        let vars = self.vars.unpack();
+        let vars = self.associated_terms.unpack();
         let goal = (self.goal_fn)(vars);
         let state = self.state.clone();
 
         let stream = goal.apply(state);
 
-        (self.vars.unpack(), stream)
+        (self.associated_terms.unpack(), stream)
     }
 }
 
@@ -149,7 +190,7 @@ where
 {
     fn default() -> Self {
         Self {
-            vars: (),
+            associated_terms: (),
             goal_fn: empty_goal::<T>,
             state: State::empty(),
         }
@@ -176,7 +217,10 @@ mod tests {
     }
 
     #[test]
-    fn should_run_simple_query() {
-        let _query = Query::<u8, _, _>::default().with_var('a').with_var('b');
+    fn should_be_be_able_to_stack_on_query_builder() {
+        let _query = Query::<u8, _, _>::default()
+            .with_var('a')
+            .with_var('b')
+            .with_term(Term::value(1));
     }
 }
