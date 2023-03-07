@@ -47,7 +47,7 @@ impl Var {
 }
 
 /// A Term representing either a Value or Variable or list of Terms.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Term<T: ValueRepresentable> {
     /// Term contains a variable.
     Var(Var),

@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::rc::Rc;
+
 use super::*;
 
 /// A marker trait to identify non-`()` placeholder types.
@@ -210,6 +213,47 @@ where
     fn new(stream: Stream<T>) -> Self {
         Self { stream }
     }
+
+    pub fn values_of<V>(&self, var: V) -> HashSet<Rc<T>>
+    where
+        V: VarRepresentable + std::fmt::Display,
+        T: Hash,
+    {
+        let var_repr = var.to_string();
+        let terms_matching_var = self
+            .stream
+            .iter()
+            .filter_map(|state| {
+                let count = state.occurence_counter.get(&var_repr).copied()?;
+
+                let state_iter = (0..=(count))
+                    .into_iter()
+                    .flat_map(|occ_count| state.term_mapping.get(&var.to_var_repr(occ_count)));
+
+                Some(state_iter)
+            })
+            .flatten();
+
+        let values = terms_matching_var.filter_map(|term| match term {
+            Term::Value(t) => Some(t.clone()),
+            _ => None,
+        });
+
+        values.collect()
+    }
+
+    pub fn into_stream(self) -> Stream<T> {
+        self.stream
+    }
+}
+
+impl<T> From<QueryResult<T>> for Stream<T>
+where
+    T: ValueRepresentable,
+{
+    fn from(result: QueryResult<T>) -> Self {
+        result.into_stream()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -266,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn should_be_be_able_to_stack_on_query_builder() {
+    fn should_return_value_of_variable_from_query() {
         let query = QueryBuilder::default()
             .with_var('a')
             .with_var('b')
@@ -279,7 +323,13 @@ mod tests {
             });
 
         let result = query.run();
-        assert_eq!(result.stream.len(), 1);
-        assert_eq!(result.stream[0].term_mapping.len(), 2)
+        let a_values = result.values_of('a');
+        let b_values = result.values_of('b');
+
+        // assert all values of a == 1.
+        assert!(a_values.into_iter().all(|val| val.as_ref() == &1_u8));
+
+        // assert all values of b == 1.
+        assert!(b_values.into_iter().all(|val| val.as_ref() == &1_u8))
     }
 }
