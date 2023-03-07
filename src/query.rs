@@ -8,6 +8,8 @@ pub trait IsNonEmptyUnpackable {}
 
 impl<T: ValueRepresentable> IsNonEmptyUnpackable for Term<T> {}
 
+/// A type that allows the conversion of joined pairs to an unpacked
+/// representation for building a [Goal].
 pub trait Unpackable<O> {
     type ValueKind;
 
@@ -31,6 +33,7 @@ impl<T: ValueRepresentable> Unpackable<Term<T>> for Var {
     }
 }
 
+/// Join functions as an internal type for associating [Term]s passed to a [QueryBuilder].
 #[derive(Debug)]
 pub struct Join<P1, P2> {
     lvar: P1,
@@ -38,6 +41,7 @@ pub struct Join<P1, P2> {
 }
 
 impl<P1, P2> Join<P1, P2> {
+    #[must_use]
     fn new(lvar: P1, rvar: P2) -> Self {
         Self { lvar, rvar }
     }
@@ -67,6 +71,8 @@ impl<P1, P2> From<Join<P1, P2>> for (P1, P2) {
     }
 }
 
+/// QueryBuilder provides methods and types for building a [Query] against a
+/// relation from a set of variables.
 #[derive(Debug, Clone)]
 pub struct QueryBuilder<T, V>
 where
@@ -80,6 +86,8 @@ impl<T, V> QueryBuilder<T, V>
 where
     T: ValueRepresentable,
 {
+    /// Instantiates a new [QueryBuilder] from its consituent parts.
+    #[must_use]
     pub fn new(vars: V, state: State<T>) -> Self {
         Self {
             associated_terms: vars,
@@ -92,6 +100,40 @@ impl<T> QueryBuilder<T, ()>
 where
     T: ValueRepresentable,
 {
+    /// Takes a [Term] and allocates it for use in a [Goal] build.
+    ///
+    /// # Caller assumes
+    /// If a `Term::Var` is passed, this variable has already been declared against
+    /// the state. If not, use `Query::with_var` instead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_term(Term::value(1));
+    /// ```
+    pub fn with_term(self, term: Term<T>) -> QueryBuilder<T, Term<T>> {
+        let state = self.state;
+
+        QueryBuilder::new(term, state)
+    }
+
+    /// Associates a new variable with the `QueryBuilder`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_var('b');
+    /// ```
     pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Term<T>>
     where
         NV: VarRepresentable + std::fmt::Display,
@@ -103,15 +145,20 @@ where
         QueryBuilder::new(Term::var(new_var), state)
     }
 
-    /// Takes a term and allocates it against the query.
+    /// Associates a new value [Term] with the [QueryBuilder].
     ///
-    /// # Caller assumes
-    /// If a `Term::Var` is passed, this variable has already been declared against
-    /// the state. If not, use `Query::with_var` instead.
-    pub fn with_term(self, term: Term<T>) -> QueryBuilder<T, Term<T>> {
-        let state = self.state;
-
-        QueryBuilder::new(term, state)
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_value(1);
+    /// ```
+    pub fn with_value(self, new_val: T) -> QueryBuilder<T, Term<T>> {
+        self.with_term(Term::value(new_val))
     }
 }
 
@@ -120,6 +167,33 @@ where
     T: ValueRepresentable,
     V: IsNonEmptyUnpackable,
 {
+    /// Takes a term and allocates it against the query.
+    ///
+    /// # Caller assumes
+    ///
+    /// If a `Term::Var` is passed, this variable has already been declared against
+    /// the state. If not, use `Query::with_var` instead.
+    pub fn with_term(self, term: Term<T>) -> QueryBuilder<T, Join<V, Term<T>>> {
+        let state = self.state;
+        let prev_terms = self.associated_terms;
+
+        let joined_vars = Join::new(prev_terms, term);
+
+        QueryBuilder::new(joined_vars, state)
+    }
+
+    /// Associates a new variable with the `QueryBuilder`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_var('b');
+    /// ```
     pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Join<V, Term<T>>>
     where
         NV: VarRepresentable + std::fmt::Display,
@@ -134,18 +208,20 @@ where
         QueryBuilder::new(joined_vars, state)
     }
 
-    /// Takes a term and allocates it against the query.
+    /// Associates a new value [Term] with the [QueryBuilder].
     ///
-    /// # Caller assumes
-    /// If a `Term::Var` is passed, this variable has already been declared against
-    /// the state. If not, use `Query::with_var` instead.
-    pub fn with_term(self, term: Term<T>) -> QueryBuilder<T, Join<V, Term<T>>> {
-        let state = self.state;
-        let prev_terms = self.associated_terms;
-
-        let joined_vars = Join::new(prev_terms, term);
-
-        QueryBuilder::new(joined_vars, state)
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_value(1);
+    /// ```
+    pub fn with_value(self, new_val: T) -> QueryBuilder<T, Join<V, Term<T>>> {
+        self.with_term(Term::value(new_val))
     }
 }
 
@@ -153,6 +229,19 @@ impl<T> QueryBuilder<T, ()>
 where
     T: ValueRepresentable,
 {
+    /// Constructs a [Query] from a passed relations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_var('b')
+    ///     .build(|(a, b)| equal(a, b));
+    /// ```
     pub fn build<G, NGF>(self, new_goal: NGF) -> Query<T, (), G>
     where
         G: Goal<T>,
@@ -171,6 +260,19 @@ where
     T: ValueRepresentable,
     V: IsNonEmptyUnpackable,
 {
+    /// Constructs a [Query] from a passed relations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::<u8, _>::default()
+    ///     .with_var('a')
+    ///     .with_var('b')
+    ///     .build(|(a, b)| equal(a, b));
+    /// ```
     pub fn build<G, UT, NGF>(self, new_goal: NGF) -> Query<T, UT, G>
     where
         G: Goal<T>,
@@ -198,6 +300,8 @@ where
     }
 }
 
+/// Provides types for querying the results of a `Query` run for given
+/// variables.
 #[derive(Debug)]
 pub struct QueryResult<T>
 where
@@ -210,6 +314,7 @@ impl<T> QueryResult<T>
 where
     T: ValueRepresentable,
 {
+    #[must_use]
     fn new(stream: Stream<T>) -> Self {
         Self { stream }
     }
