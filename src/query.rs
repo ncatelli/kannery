@@ -1,3 +1,34 @@
+//! The query module provides an extension on top of the kanren engine for
+//! generating queries and relations using a more simple builder pattern.
+//!
+//! # Examples
+//!
+//!  ```
+//! use kannery::*;
+//! use kannery::query::*;;
+//!
+//! let query = QueryBuilder::default()
+//!     .with_var('a')
+//!     .with_var('b')
+//!     .with_term(Term::value(1_u8))
+//!     .build(|((a, b), one)| {
+//!         conjunction(
+//!             conjunction(equal(b.clone(), one.clone()), equal(Term::value(1), one)),
+//!             equal(a, b),
+//!         )
+//!     });
+//!
+//! let result = query.run();
+//! let a_values = result.owned_values_of('a');
+//! let b_values = result.owned_values_of('b');
+//!
+//! // assert all values of a == 1.
+//! assert!(a_values.into_iter().all(|val| val == 1_u8));
+//!
+//! // assert all values of b == 1.
+//! assert!(b_values.into_iter().all(|val| val == 1_u8))
+//! ```
+
 use std::collections::HashSet;
 use std::rc;
 
