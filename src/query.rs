@@ -201,10 +201,10 @@ where
     T: ValueRepresentable,
     G: Goal<T>,
 {
-    associated_terms: V,
+    _associated_terms: V,
     state: State<T>,
 
-    goal_fn: G,
+    goal: G,
 }
 
 impl<T, V, G> Query<T, V, G>
@@ -214,14 +214,17 @@ where
 {
     pub fn new(associated_terms: V, state: State<T>, goal_fn: G) -> Self {
         Self {
-            associated_terms,
+            _associated_terms: associated_terms,
             state,
-            goal_fn,
+            goal: goal_fn,
         }
     }
 
     pub fn run(self) -> Stream<T> {
-        todo!()
+        let state = self.state;
+        let goal = self.goal;
+
+        goal.apply(state)
     }
 }
 
@@ -246,10 +249,19 @@ mod tests {
 
     #[test]
     fn should_be_be_able_to_stack_on_query_builder() {
-        let _query = QueryBuilder::default()
+        let query = QueryBuilder::default()
             .with_var('a')
             .with_var('b')
             .with_term(Term::value(1_u8))
-            .build(|_| equal(Term::value(1), Term::value(2)));
+            .build(|((a, b), one)| {
+                conjunction(
+                    conjunction(equal(b.clone(), one.clone()), equal(Term::value(1), one)),
+                    equal(a, b),
+                )
+            });
+
+        let stream = query.run();
+        assert_eq!(stream.len(), 1);
+        assert_eq!(stream[0].term_mapping.len(), 2)
     }
 }
