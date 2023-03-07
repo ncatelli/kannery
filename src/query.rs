@@ -64,56 +64,40 @@ impl<P1, P2> From<Join<P1, P2>> for (P1, P2) {
     }
 }
 
-trait Runnable<OV, T>
-where
-    T: ValueRepresentable,
-{
-    fn run(&self) -> (OV, Stream<T>);
-}
-
-fn empty_goal<T: ValueRepresentable>(_: State<T>) -> Stream<T> {
-    Stream::new()
-}
-
 #[derive(Debug, Clone)]
-pub struct Query<T, V, GF>
+pub struct QueryBuilder<T, V>
 where
     T: ValueRepresentable,
 {
     associated_terms: V,
     state: State<T>,
-
-    goal_fn: GF,
 }
 
-impl<T, V, GF> Query<T, V, GF>
+impl<T, V> QueryBuilder<T, V>
 where
     T: ValueRepresentable,
 {
-    pub fn new(vars: V, state: State<T>, goal_fn: GF) -> Self {
+    pub fn new(vars: V, state: State<T>) -> Self {
         Self {
             associated_terms: vars,
-            goal_fn,
             state,
         }
     }
 }
 
-impl<T, GF> Query<T, (), GF>
+impl<T> QueryBuilder<T, ()>
 where
     T: ValueRepresentable,
-    GF: Goal<T>,
 {
-    pub fn with_var<NV>(self, new_var_repr: NV) -> Query<T, Term<T>, GF>
+    pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Term<T>>
     where
         NV: VarRepresentable + std::fmt::Display,
     {
         let mut state = self.state;
-        let goal = self.goal_fn;
 
         let new_var = state.declare(new_var_repr);
 
-        Query::new(Term::var(new_var), state, goal)
+        QueryBuilder::new(Term::var(new_var), state)
     }
 
     /// Takes a term and allocates it against the query.
@@ -121,33 +105,30 @@ where
     /// # Caller assumes
     /// If a `Term::Var` is passed, this variable has already been declared against
     /// the state. If not, use `Query::with_var` instead.
-    pub fn with_term(self, term: Term<T>) -> Query<T, Term<T>, GF> {
+    pub fn with_term(self, term: Term<T>) -> QueryBuilder<T, Term<T>> {
         let state = self.state;
-        let goal = self.goal_fn;
 
-        Query::new(term, state, goal)
+        QueryBuilder::new(term, state)
     }
 }
 
-impl<T, V, GF> Query<T, V, GF>
+impl<T, V> QueryBuilder<T, V>
 where
     T: ValueRepresentable,
-    GF: Goal<T>,
     V: IsNonEmptyUnpackable,
 {
-    pub fn with_var<NV>(self, new_var_repr: NV) -> Query<T, Join<V, Term<T>>, GF>
+    pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Join<V, Term<T>>>
     where
         NV: VarRepresentable + std::fmt::Display,
     {
         let mut state = self.state;
         let prev_vars = self.associated_terms;
-        let goal = self.goal_fn;
 
         let new_var = state.declare(new_var_repr);
         let new_var_term = Term::var(new_var);
         let joined_vars = Join::new(prev_vars, new_var_term);
 
-        Query::new(joined_vars, state, goal)
+        QueryBuilder::new(joined_vars, state)
     }
 
     /// Takes a term and allocates it against the query.
@@ -155,45 +136,92 @@ where
     /// # Caller assumes
     /// If a `Term::Var` is passed, this variable has already been declared against
     /// the state. If not, use `Query::with_var` instead.
-    pub fn with_term(self, term: Term<T>) -> Query<T, Join<V, Term<T>>, GF> {
+    pub fn with_term(self, term: Term<T>) -> QueryBuilder<T, Join<V, Term<T>>> {
         let state = self.state;
         let prev_terms = self.associated_terms;
-        let goal = self.goal_fn;
 
         let joined_vars = Join::new(prev_terms, term);
 
-        Query::new(joined_vars, state, goal)
+        QueryBuilder::new(joined_vars, state)
     }
 }
 
-impl<OV, T, V, GF, G> Runnable<OV, T> for Query<T, V, GF>
+impl<T> QueryBuilder<T, ()>
 where
     T: ValueRepresentable,
-    V: Unpackable<OV>,
-    G: Goal<T>,
-    GF: Fn(OV) -> G,
 {
-    fn run(&self) -> (OV, Stream<T>) {
-        let vars = self.associated_terms.unpack();
-        let goal = (self.goal_fn)(vars);
-        let state = self.state.clone();
+    pub fn build<G, NGF>(self, new_goal: NGF) -> Query<T, (), G>
+    where
+        G: Goal<T>,
+        NGF: Fn() -> G,
+    {
+        let state = self.state;
 
-        let stream = goal.apply(state);
+        let goal = new_goal();
 
-        (self.associated_terms.unpack(), stream)
+        Query::new((), state, goal)
     }
 }
 
-impl<T> Default for Query<T, (), fn(State<T>) -> Stream<T>>
+impl<T, V> QueryBuilder<T, V>
+where
+    T: ValueRepresentable,
+    V: IsNonEmptyUnpackable,
+{
+    pub fn build<G, UT, NGF>(self, new_goal: NGF) -> Query<T, UT, G>
+    where
+        G: Goal<T>,
+        V: Unpackable<UT, ValueKind = T>,
+        NGF: Fn(UT) -> G,
+    {
+        let state = self.state;
+
+        let associated_terms = self.associated_terms;
+        let goal = new_goal(associated_terms.unpack());
+
+        Query::new(associated_terms.unpack(), state, goal)
+    }
+}
+
+impl<T> Default for QueryBuilder<T, ()>
 where
     T: ValueRepresentable,
 {
     fn default() -> Self {
         Self {
             associated_terms: (),
-            goal_fn: empty_goal::<T>,
             state: State::empty(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Query<T, V, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    associated_terms: V,
+    state: State<T>,
+
+    goal_fn: G,
+}
+
+impl<T, V, G> Query<T, V, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    pub fn new(associated_terms: V, state: State<T>, goal_fn: G) -> Self {
+        Self {
+            associated_terms,
+            state,
+            goal_fn,
+        }
+    }
+
+    pub fn run(self) -> Stream<T> {
+        todo!()
     }
 }
 
@@ -218,9 +246,10 @@ mod tests {
 
     #[test]
     fn should_be_be_able_to_stack_on_query_builder() {
-        let _query = Query::<u8, _, _>::default()
+        let _query = QueryBuilder::default()
             .with_var('a')
             .with_var('b')
-            .with_term(Term::value(1));
+            .with_term(Term::value(1_u8))
+            .build(|_| equal(Term::value(1), Term::value(2)));
     }
 }
