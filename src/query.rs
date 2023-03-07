@@ -214,6 +214,35 @@ where
         Self { stream }
     }
 
+    /// Returns reference-counted values matching a given variable representation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::default()
+    ///     .with_var('a')
+    ///     .with_var('b')
+    ///     .with_term(Term::value(1_u8))
+    ///     .build(|((a, b), one)| {
+    ///         conjunction(
+    ///             conjunction(equal(b.clone(), one.clone()), equal(Term::value(1), one)),
+    ///             equal(a, b),
+    ///         )
+    ///     });
+    ///
+    /// let result = query.run();
+    /// let a_values = result.values_of('a');
+    /// let b_values = result.values_of('b');
+    ///
+    /// // assert all values of a == 1.
+    /// assert!(a_values.into_iter().all(|val| val.as_ref() == &1_u8));
+    ///
+    /// // assert all values of b == 1.
+    /// assert!(b_values.into_iter().all(|val| val.as_ref() == &1_u8))
+    /// ```
     pub fn values_of<V>(&self, var: V) -> HashSet<rc::Rc<T>>
     where
         V: VarRepresentable + std::fmt::Display,
@@ -242,6 +271,35 @@ where
         values.collect()
     }
 
+    /// Returns owned values matching a given variable representation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::*;
+    /// use kannery::query::*;
+    ///
+    /// let query = QueryBuilder::default()
+    ///     .with_var('a')
+    ///     .with_var('b')
+    ///     .with_term(Term::value(1_u8))
+    ///     .build(|((a, b), one)| {
+    ///         conjunction(
+    ///             conjunction(equal(b.clone(), one.clone()), equal(Term::value(1), one)),
+    ///             equal(a, b),
+    ///         )
+    ///     });
+    ///
+    /// let result = query.run();
+    /// let a_values = result.owned_values_of('a');
+    /// let b_values = result.owned_values_of('b');
+    ///
+    /// // assert all values of a == 1.
+    /// assert!(a_values.into_iter().all(|val| val == 1_u8));
+    ///
+    /// // assert all values of b == 1.
+    /// assert!(b_values.into_iter().all(|val| val == 1_u8))
+    /// ```
     pub fn owned_values_of<V>(&self, var: V) -> HashSet<T>
     where
         V: VarRepresentable + std::fmt::Display,
@@ -286,6 +344,8 @@ where
     }
 }
 
+/// Query consists of an associated `State`, `Term`s and `Goal` that can then
+/// be ran to generate a set of matching results.
 #[derive(Debug, Clone)]
 pub struct Query<T, V, G>
 where
@@ -303,6 +363,8 @@ where
     T: ValueRepresentable,
     G: Goal<T>,
 {
+    /// Instantiate a new Query from its consituent parts.
+    #[must_use]
     pub fn new(associated_terms: V, state: State<T>, goal_fn: G) -> Self {
         Self {
             _associated_terms: associated_terms,
@@ -366,29 +428,5 @@ mod tests {
         assert!(matches!(a2, Term::Var(_)));
         assert!(matches!(b2, Term::Var(_)));
         assert_eq!(c2, c);
-    }
-
-    #[test]
-    fn should_return_value_of_variable_from_query() {
-        let query = QueryBuilder::default()
-            .with_var('a')
-            .with_var('b')
-            .with_term(Term::value(1_u8))
-            .build(|((a, b), one)| {
-                conjunction(
-                    conjunction(equal(b.clone(), one.clone()), equal(Term::value(1), one)),
-                    equal(a, b),
-                )
-            });
-
-        let result = query.run();
-        let a_values = result.owned_values_of('a');
-        let b_values = result.owned_values_of('b');
-
-        // assert all values of a == 1.
-        assert!(a_values.into_iter().all(|val| val == 1_u8));
-
-        // assert all values of b == 1.
-        assert!(b_values.into_iter().all(|val| val == 1_u8))
     }
 }
