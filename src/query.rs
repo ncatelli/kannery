@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::rc::Rc;
+use std::rc;
 
 use super::*;
 
@@ -214,7 +214,7 @@ where
         Self { stream }
     }
 
-    pub fn values_of<V>(&self, var: V) -> HashSet<Rc<T>>
+    pub fn values_of<V>(&self, var: V) -> HashSet<rc::Rc<T>>
     where
         V: VarRepresentable + std::fmt::Display,
         T: Hash,
@@ -236,6 +236,36 @@ where
 
         let values = terms_matching_var.filter_map(|term| match term {
             Term::Value(t) => Some(t.clone()),
+            _ => None,
+        });
+
+        values.collect()
+    }
+
+    pub fn owned_values_of<V>(&self, var: V) -> HashSet<T>
+    where
+        V: VarRepresentable + std::fmt::Display,
+        T: Hash,
+    {
+        use std::borrow::Borrow;
+
+        let var_repr = var.to_string();
+        let terms_matching_var = self
+            .stream
+            .iter()
+            .filter_map(|state| {
+                let count = state.occurence_counter.get(&var_repr).copied()?;
+
+                let state_iter = (0..=(count))
+                    .into_iter()
+                    .flat_map(|occ_count| state.term_mapping.get(&var.to_var_repr(occ_count)));
+
+                Some(state_iter)
+            })
+            .flatten();
+
+        let values = terms_matching_var.filter_map(|term| match term {
+            Term::Value(t) => Some((Borrow::<T>::borrow(t)).clone()),
             _ => None,
         });
 
@@ -301,14 +331,14 @@ where
     ///     });
     ///
     /// let result = query.run();
-    /// let a_values = result.values_of('a');
-    /// let b_values = result.values_of('b');
+    /// let a_values = result.owned_values_of('a');
+    /// let b_values = result.owned_values_of('b');
     ///
     /// // assert all values of a == 1.
-    /// assert!(a_values.into_iter().all(|val| val.as_ref() == &1_u8));
+    /// assert!(a_values.into_iter().all(|val| val == 1_u8));
     ///
     /// // assert all values of b == 1.
-    /// assert!(b_values.into_iter().all(|val| val.as_ref() == &1_u8))
+    /// assert!(b_values.into_iter().all(|val| val == 1_u8))
     /// ```
     pub fn run(self) -> QueryResult<T> {
         let state = self.state;
@@ -352,13 +382,13 @@ mod tests {
             });
 
         let result = query.run();
-        let a_values = result.values_of('a');
-        let b_values = result.values_of('b');
+        let a_values = result.owned_values_of('a');
+        let b_values = result.owned_values_of('b');
 
         // assert all values of a == 1.
-        assert!(a_values.into_iter().all(|val| val.as_ref() == &1_u8));
+        assert!(a_values.into_iter().all(|val| val == 1_u8));
 
         // assert all values of b == 1.
-        assert!(b_values.into_iter().all(|val| val.as_ref() == &1_u8))
+        assert!(b_values.into_iter().all(|val| val == 1_u8))
     }
 }
