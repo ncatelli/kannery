@@ -195,6 +195,23 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct QueryResult<T>
+where
+    T: ValueRepresentable,
+{
+    stream: Stream<T>,
+}
+
+impl<T> QueryResult<T>
+where
+    T: ValueRepresentable,
+{
+    fn new(stream: Stream<T>) -> Self {
+        Self { stream }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Query<T, V, G>
 where
@@ -220,11 +237,12 @@ where
         }
     }
 
-    pub fn run(self) -> Stream<T> {
+    pub fn run(self) -> QueryResult<T> {
         let state = self.state;
         let goal = self.goal;
 
-        goal.apply(state)
+        let stream = goal.apply(state);
+        QueryResult::new(stream)
     }
 }
 
@@ -260,8 +278,8 @@ mod tests {
                 )
             });
 
-        let stream = query.run();
-        assert_eq!(stream.len(), 1);
-        assert_eq!(stream[0].term_mapping.len(), 2)
+        let result = query.run();
+        assert_eq!(result.stream.len(), 1);
+        assert_eq!(result.stream[0].term_mapping.len(), 2)
     }
 }
