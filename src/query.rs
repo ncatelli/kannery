@@ -64,6 +64,55 @@ impl<T: ValueRepresentable> Unpackable<Term<T>> for Var {
     }
 }
 
+/// Represents a Variable for association to a [Query].
+#[derive(Debug)]
+pub struct AssociatedVar(Var);
+
+impl AssociatedVar {
+    /// Instantiate a new AssociatedVar.
+    fn new(var: Var) -> Self {
+        Self(var)
+    }
+}
+
+impl IsNonEmptyUnpackable for AssociatedVar {}
+
+impl<T> Unpackable<Term<T>> for AssociatedVar
+where
+    T: VarRepresentable,
+{
+    type ValueKind = T;
+
+    fn unpack(&self) -> Term<T> {
+        Term::var(self.0)
+    }
+}
+
+/// Represents a value for association to a [Query].
+#[derive(Debug)]
+pub struct AssociatedValue<T: ValueRepresentable>(T);
+
+impl<T: ValueRepresentable> AssociatedValue<T> {
+    /// Instantiate a new AssociatedValue from a value representable kind.
+    #[must_use]
+    fn new(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ValueRepresentable> IsNonEmptyUnpackable for AssociatedValue<T> {}
+
+impl<T> Unpackable<Term<T>> for AssociatedValue<T>
+where
+    T: ValueRepresentable,
+{
+    type ValueKind = T;
+
+    fn unpack(&self) -> Term<T> {
+        Term::value(self.0.clone())
+    }
+}
+
 /// Join functions as an internal type for associating [Term]s passed to a [QueryBuilder].
 #[derive(Debug)]
 pub struct Join<P1, P2> {
@@ -165,7 +214,7 @@ where
     ///     .with_var('a')
     ///     .with_var('b');
     /// ```
-    pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Term<T>>
+    pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, AssociatedVar>
     where
         NV: VarRepresentable + std::fmt::Display,
     {
@@ -173,7 +222,7 @@ where
 
         let new_var = state.declare(new_var_repr);
 
-        QueryBuilder::new(Term::var(new_var), state)
+        QueryBuilder::new(AssociatedVar::new(new_var), state)
     }
 
     /// Associates a new value [Term] with the [QueryBuilder].
@@ -188,8 +237,9 @@ where
     ///     .with_var('a')
     ///     .with_value(1);
     /// ```
-    pub fn with_value(self, new_val: T) -> QueryBuilder<T, Term<T>> {
-        self.with_term(Term::value(new_val))
+    pub fn with_value(self, new_val: T) -> QueryBuilder<T, AssociatedValue<T>> {
+        let state = self.state;
+        QueryBuilder::new(AssociatedValue::new(new_val), state)
     }
 }
 
@@ -225,7 +275,7 @@ where
     ///     .with_var('a')
     ///     .with_var('b');
     /// ```
-    pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Join<V, Term<T>>>
+    pub fn with_var<NV>(self, new_var_repr: NV) -> QueryBuilder<T, Join<V, AssociatedVar>>
     where
         NV: VarRepresentable + std::fmt::Display,
     {
@@ -233,8 +283,7 @@ where
         let prev_vars = self.associated_terms;
 
         let new_var = state.declare(new_var_repr);
-        let new_var_term = Term::var(new_var);
-        let joined_vars = Join::new(prev_vars, new_var_term);
+        let joined_vars = Join::new(prev_vars, AssociatedVar::new(new_var));
 
         QueryBuilder::new(joined_vars, state)
     }
@@ -251,8 +300,14 @@ where
     ///     .with_var('a')
     ///     .with_value(1);
     /// ```
-    pub fn with_value(self, new_val: T) -> QueryBuilder<T, Join<V, Term<T>>> {
-        self.with_term(Term::value(new_val))
+    pub fn with_value(self, new_val: T) -> QueryBuilder<T, Join<V, AssociatedValue<T>>> {
+        let state = self.state;
+        let prev_terms = self.associated_terms;
+
+        let new_associated_val = AssociatedValue::new(new_val);
+        let joined_vars = Join::new(prev_terms, new_associated_val);
+
+        QueryBuilder::new(joined_vars, state)
     }
 }
 
