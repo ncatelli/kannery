@@ -610,14 +610,14 @@ mod tests {
     fn should_nest_joins() {
         let a = 'a'.to_var_repr(0);
         let b = 'b'.to_var_repr(0);
-        let c = Term::value(0u8);
+        let c = 0u8;
 
-        let first_joined = Join::new(Term::<u8>::var(b), c.clone());
-        let joined = Join::new(a, first_joined);
+        let first_joined = Join::new(AssociatedVar(b), AssociatedValue(c));
+        let joined = Join::new(AssociatedVar(a), first_joined);
 
-        let (a2, (b2, c2)) = joined.unpack();
+        let (a2, (b2, c2)): (Term<u8>, (Term<u8>, Term<u8>)) = joined.unpack();
         assert!(matches!(a2, Term::Var(_)));
         assert!(matches!(b2, Term::Var(_)));
-        assert_eq!(c2, c);
+        assert_eq!(c2, Term::value(c));
     }
 }
