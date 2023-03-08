@@ -117,8 +117,9 @@ fn should_build_query_with_query_dsl() {
     use kannery::query::*;
 
     let child_of_homer = QueryBuilder::default()
+        .with_value("Homer")
         .with_var("child")
-        .build(|child| parent_child_relationship_goal(Term::value("Homer"), child));
+        .build(|(parent, child)| parent_child_relationship_goal(parent, child));
 
     let res = child_of_homer.run();
     let sorted_children = {
@@ -132,7 +133,8 @@ fn should_build_query_with_query_dsl() {
     // map parent relationship
     let parents_of_lisa = QueryBuilder::default()
         .with_var("parent")
-        .build(|parent| parent_child_relationship_goal(parent, Term::value("Lisa")));
+        .with_value("Lisa")
+        .build(|(parent, child)| parent_child_relationship_goal(parent, child));
 
     let res = parents_of_lisa.run();
     let sorted_parents = {
