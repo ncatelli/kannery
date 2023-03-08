@@ -68,10 +68,7 @@ fn should_return_multiple_relations() {
 
     assert_eq!(stream.len(), 2, "{:?}", res);
     let sorted_children = sort_values(res);
-    assert_eq!(
-        ["Bart".to_string(), "Lisa".to_string()].as_slice(),
-        sorted_children.as_slice()
-    );
+    assert_eq!(["Bart", "Lisa"].as_slice(), sorted_children.as_slice());
 
     // map parent relationship
     let parents_of_lisa = fresh("parent", |parent| {
@@ -84,10 +81,7 @@ fn should_return_multiple_relations() {
     assert_eq!(stream.len(), 2, "{:?}", res);
     let sorted_parents = sort_values(res);
 
-    assert_eq!(
-        ["Homer".to_string(), "Marge".to_string()].as_slice(),
-        sorted_parents.as_slice()
-    );
+    assert_eq!(["Homer", "Marge"].as_slice(), sorted_parents.as_slice());
 }
 
 #[test]
@@ -115,10 +109,7 @@ fn should_define_relations_without_fresh() {
     assert_eq!(stream.len(), 2, "{:?}", res);
     let sorted_parents = sort_values(res);
 
-    assert_eq!(
-        ["Homer".to_string(), "Marge".to_string()].as_slice(),
-        sorted_parents.as_slice()
-    );
+    assert_eq!(["Homer", "Marge"].as_slice(), sorted_parents.as_slice());
 }
 
 #[test]
@@ -136,10 +127,7 @@ fn should_build_query_with_query_dsl() {
         children
     };
 
-    assert_eq!(
-        ["Bart".to_string(), "Lisa".to_string()].as_slice(),
-        sorted_children.as_slice()
-    );
+    assert_eq!(["Bart", "Lisa"].as_slice(), sorted_children.as_slice());
 
     // map parent relationship
     let parents_of_lisa = QueryBuilder::default()
@@ -153,8 +141,5 @@ fn should_build_query_with_query_dsl() {
         parents
     };
 
-    assert_eq!(
-        ["Homer".to_string(), "Marge".to_string()].as_slice(),
-        sorted_parents.as_slice()
-    );
+    assert_eq!(["Homer", "Marge"].as_slice(), sorted_parents.as_slice());
 }
