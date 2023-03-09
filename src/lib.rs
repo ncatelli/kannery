@@ -309,7 +309,28 @@ impl<T: VarRepresentable> DeepWalkable<T> for TermMapping<T> {
     }
 }
 
-pub trait Runnable<T: ValueRepresentable>: Clone {
+/// A helper trait for defining the behavior for performing a DeepWalk against
+/// a [Stream] against a given term.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     Equal::new(Term::var(x), Term::value(1))
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
+/// ```
+pub trait Runnable<T: ValueRepresentable> {
+    /// Run defines the behavior for resolving all possible terms that can
+    /// equate to a passed term.
     fn run(&self, term: &Term<T>) -> Vec<Term<T>>;
 }
 
