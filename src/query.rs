@@ -4,8 +4,8 @@
 //! # Examples
 //!
 //!  ```
+//! use kannery::prelude::v1::*;
 //! use kannery::*;
-//! use kannery::query::*;;
 //!
 //! let query = QueryBuilder::default()
 //!     .with_var('a')
@@ -189,8 +189,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -207,8 +207,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -230,8 +230,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -268,8 +268,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -293,8 +293,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -320,8 +320,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -351,8 +351,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::<u8, _>::default()
     ///     .with_var('a')
@@ -410,8 +410,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::default()
     ///     .with_var('a')
@@ -467,8 +467,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;
     ///
     /// let query = QueryBuilder::default()
     ///     .with_var('a')
@@ -569,8 +569,8 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
-    /// use kannery::query::*;;
     ///
     /// let query = QueryBuilder::default()
     ///     .with_var('a')

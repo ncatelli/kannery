@@ -1,3 +1,4 @@
+use kannery::prelude::v1::*;
 use kannery::*;
 
 fn parent_child_relationship_goal(
@@ -114,7 +115,7 @@ fn should_define_relations_without_fresh() {
 
 #[test]
 fn should_build_query_with_query_dsl() {
-    use kannery::query::*;
+    use kannery::*;
 
     let child_of_homer = QueryBuilder::default()
         .with_value("Homer")

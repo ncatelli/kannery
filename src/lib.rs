@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-pub mod query;
+pub mod prelude;
+mod query;
+
+pub use query::{IsNonEmptyUnpackable, QueryBuilder, Unpackable};
 
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
@@ -63,6 +66,7 @@ impl<T: ValueRepresentable> Term<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let var = 0_u8.to_var_repr(0);  
@@ -79,6 +83,7 @@ impl<T: ValueRepresentable> Term<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     /// use std::rc::Rc;
     ///
@@ -95,6 +100,7 @@ impl<T: ValueRepresentable> Term<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     /// use std::rc::Rc;
     ///
@@ -173,6 +179,7 @@ impl<T: ValueRepresentable> State<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let mut state = State::<()>::empty();
@@ -384,6 +391,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let _x_equals = Fresh::new("x", |x| {
@@ -416,6 +424,7 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let _x_equals = Fresh::new("x", |x| {
@@ -449,6 +458,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let _x_equals = fresh("x", |x| {
@@ -471,6 +481,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let _x_equals = declare("x", |x| {
@@ -516,6 +527,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -540,6 +552,7 @@ impl<T: ValueRepresentable> Equal<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let x_equals = fresh('x', |x| {
@@ -568,6 +581,7 @@ impl<T: VarRepresentable> Goal<T> for Equal<T> {
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -595,6 +609,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -620,6 +635,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -650,6 +666,7 @@ impl<T: ValueRepresentable> NotEqual<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let x_equals = fresh('x', |x| {
@@ -684,6 +701,7 @@ impl<T: VarRepresentable> Goal<T> for NotEqual<T> {
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -717,6 +735,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -748,6 +767,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_less_than = |max: u8| {
@@ -779,6 +799,7 @@ impl<T: ValueRepresentable + PartialOrd> LessThan<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let x_is_less_than = |max: u8| {
@@ -817,6 +838,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_less_than = |max: u8| {
@@ -850,6 +872,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_less_than_or_equal_to = |max: u8| {
@@ -881,6 +904,7 @@ impl<T: ValueRepresentable + PartialOrd> LessEqual<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let x_is_less_than_or_equal_to = |max: u8| {
@@ -920,6 +944,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_less_than_or_equal_to = |max: u8| {
@@ -952,6 +977,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_greater_than = |min: u8| {
@@ -983,6 +1009,7 @@ impl<T: ValueRepresentable + PartialOrd> GreaterThan<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let x_is_greater_than = |min: u8| {
@@ -1021,6 +1048,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_greater_than = |min: u8| {
@@ -1054,6 +1082,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_greater_than = |min: u8| {
@@ -1085,6 +1114,7 @@ impl<T: ValueRepresentable + PartialOrd> GreaterEqual<T> {
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let x_is_greater_than = |min: u8| {
@@ -1124,6 +1154,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_is_greater_than = |min: u8| {
@@ -1156,6 +1187,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -1193,6 +1225,7 @@ where
     /// # Examples
     ///
     /// ```
+    /// use kannery::prelude::v1::*;
     /// use kannery::*;
     ///
     /// let _x_equals = Disjunction::new(
@@ -1231,6 +1264,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -1261,6 +1295,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = declare('x', |x| {
@@ -1288,6 +1323,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -1352,6 +1388,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = fresh('x', |x| {
@@ -1384,6 +1421,7 @@ where
 /// # Examples
 ///
 /// ```
+/// use kannery::prelude::v1::*;
 /// use kannery::*;
 ///
 /// let x_equals = declare('x', |x| {
