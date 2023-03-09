@@ -4,7 +4,7 @@ use std::hash::Hash;
 pub mod prelude;
 mod query;
 
-pub use query::{IsNonEmptyUnpackable, QueryBuilder, Unpackable};
+pub use query::{IsNonEmptyUnpackable, Query, QueryBuilder, Unpackable};
 
 /// Any type that can be represented as a `Var`.
 pub trait VarRepresentable: Sized + Clone + Hash + Eq {
