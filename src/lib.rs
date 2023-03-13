@@ -394,6 +394,25 @@ pub type Stream<T> = Vec<State<T>>;
 /// states that can be evaluated against those terms.
 pub trait Goal<T: ValueRepresentable> {
     fn apply(&self, state: State<T>) -> Stream<T>;
+
+    /// Converts a goal into a boxed representation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::prelude::v1::*;
+    /// use kannery::*;
+    ///
+    /// let _x_equals = Fresh::new("x", |x| {
+    ///     eq(Term::var(x), Term::value(1)).to_boxed()
+    /// });
+    /// ```
+    fn to_boxed<'a>(self) -> BoxedGoal<'a, T>
+    where
+        Self: Sized + 'a,
+    {
+        BoxedGoal::new(self)
+    }
 }
 
 impl<F, T> Goal<T> for F
@@ -403,6 +422,75 @@ where
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
         self(state)
+    }
+}
+
+/// A heap-allocated dispatcher for a goal. This is most useful for working for
+/// goals that are not statically equivalent.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     equal(Term::var(x), Term::value(1))
+/// }).to_boxed();
+///
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
+/// ```
+pub struct BoxedGoal<'a, T>
+where
+    T: ValueRepresentable,
+{
+    goal: Box<dyn Goal<T> + 'a>,
+}
+
+impl<'a, T> BoxedGoal<'a, T>
+where
+    T: ValueRepresentable,
+{
+    /// Allocates a goal on the heap.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kannery::prelude::v1::*;
+    /// use kannery::*;
+    ///
+    /// let x_equals = BoxedGoal::new(fresh('x', |x| {
+    ///     equal(Term::var(x), Term::value(1))
+    /// }));
+    ///
+    /// let stream = x_equals.apply(State::<u8>::empty());
+    /// let x_var = 'x'.to_var_repr(0);
+    /// let res = stream.run(&Term::var(x_var));
+    ///
+    /// assert_eq!(res.len(), 1);
+    /// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
+    /// ```
+    pub fn new<G>(goal: G) -> Self
+    where
+        G: Goal<T> + 'a,
+    {
+        Self {
+            goal: Box::new(goal),
+        }
+    }
+}
+
+impl<'a, T> Goal<T> for BoxedGoal<'a, T>
+where
+    T: ValueRepresentable,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        (self.goal).apply(state)
     }
 }
 
