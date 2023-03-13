@@ -46,8 +46,10 @@ fn parent_child_relationship_goal(
     )
 }
 
-fn evaluate_simple_query(c: &mut Criterion) {
-    c.bench_function("construction of query", |b| {
+fn query_construction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("query construction");
+
+    group.bench_function("construction of static query", |b| {
         b.iter(|| {
             let child_of_homer = QueryBuilder::default()
                 .with_value("Homer")
@@ -60,7 +62,21 @@ fn evaluate_simple_query(c: &mut Criterion) {
             assert_eq!(children.len(), 2);
         });
     });
+
+    group.bench_function("construction of boxed (heap-allocated) query", |b| {
+        b.iter(|| {
+            let child_of_homer = QueryBuilder::default()
+                .with_value("Homer")
+                .with_var("child")
+                .build(|(parent, child)| parent_child_relationship_goal(parent, child).to_boxed());
+
+            let res = child_of_homer.run();
+            let children = res.owned_values_of("child");
+
+            assert_eq!(children.len(), 2);
+        });
+    });
 }
 
-criterion_group!(benches, evaluate_simple_query);
+criterion_group!(benches, query_construction);
 criterion_main!(benches);
