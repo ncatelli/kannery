@@ -1554,3 +1554,139 @@ where
 {
     conjunction(goal1, goal2)
 }
+
+/// Returns the states that are true of all of a set of goals. Equivalent to a
+/// logical and.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = declare('x', |x| {
+///     declare('y', move |y| {
+///         ConjunctionPlus::new(vec![
+///             equal(Term::var(x), Term::var(y)).to_boxed(),
+///             equal(Term::var(x), Term::value(1)).to_boxed(),
+///             equal(Term::var(y), Term::value(1)).to_boxed()
+///         ])
+///     })
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
+/// ```
+pub struct ConjunctionPlus<T, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    _value_kind: std::marker::PhantomData<T>,
+    goals: Vec<G>,
+}
+
+impl<T, G> ConjunctionPlus<T, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    pub fn new(goals: Vec<G>) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            goals,
+        }
+    }
+}
+
+impl<T, G> Goal<T> for ConjunctionPlus<T, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        // start from the tail.
+        let goals = self.goals.iter().rev();
+        let initial_state = vec![state];
+
+        goals.fold(initial_state, |stream, goal| {
+            stream
+                .into_iter()
+                .flat_map(|state| goal.apply(state))
+                .collect::<Vec<_>>()
+        })
+    }
+}
+
+/// Returns the states that are true of all of a set of goals. Equivalent to a
+/// logical and.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = declare('x', |x| {
+///     declare('y', move |y| {
+///         conjunction_plus(vec![
+///             equal(Term::var(x), Term::var(y)).to_boxed(),
+///             equal(Term::var(x), Term::value(1)).to_boxed(),
+///             equal(Term::var(y), Term::value(1)).to_boxed()
+///         ])
+///     })
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
+/// ```
+pub fn conjunction_plus<T, G>(goals: impl Into<Vec<G>>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    let goals = goals.into();
+    ConjunctionPlus::new(goals)
+}
+
+/// Returns the states that are true of all of a set of goals. Equivalent to a
+/// logical and.
+///
+/// A shorthand alias to [conjunction_plus].
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = declare('x', |x| {
+///     declare('y', move |y| {
+///         all([
+///             equal(Term::var(x), Term::var(y)).to_boxed(),
+///             equal(Term::var(x), Term::value(1)).to_boxed(),
+///             equal(Term::var(y), Term::value(1)).to_boxed()
+///         ])
+///     })
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(res.len(), 1);
+/// assert_eq!([Term::value(1)].as_slice(), res.as_slice());
+/// ```
+pub fn all<T, G>(goals: impl Into<Vec<G>>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    let goals = goals.into();
+    conjunction_plus(goals)
+}
