@@ -82,6 +82,38 @@ fn boxed_parent_child_relationship_goal(
     ])
 }
 
+fn relation_construction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("building relations");
+
+    group.bench_function("construction of static relation", |b| {
+        b.iter(|| {
+            let child_of_homer = fresh("child", |child| {
+                parent_child_relationship_goal(Term::value("Homer"), Term::var(child))
+            });
+
+            let stream = child_of_homer.apply(State::empty());
+            let child_var = "child".to_var_repr(0);
+            let children = stream.run(&Term::Var(child_var));
+
+            assert_eq!(children.len(), 2);
+        });
+    });
+
+    group.bench_function("construction of relation from compound goal", |b| {
+        b.iter(|| {
+            let child_of_homer = fresh("child", |child| {
+                parent_child_relationship_goal(Term::value("Homer"), Term::var(child))
+            });
+
+            let stream = child_of_homer.apply(State::empty());
+            let child_var = "child".to_var_repr(0);
+            let children = stream.run(&Term::Var(child_var));
+
+            assert_eq!(children.len(), 2);
+        });
+    });
+}
+
 fn query_construction(c: &mut Criterion) {
     let mut group = c.benchmark_group("query construction");
 
@@ -91,20 +123,6 @@ fn query_construction(c: &mut Criterion) {
                 .with_value("Homer")
                 .with_var("child")
                 .build(|(parent, child)| parent_child_relationship_goal(parent, child));
-
-            let res = child_of_homer.run();
-            let children = res.owned_values_of("child");
-
-            assert_eq!(children.len(), 2);
-        });
-    });
-
-    group.bench_function("construction of boxed (heap-allocated) query", |b| {
-        b.iter(|| {
-            let child_of_homer = QueryBuilder::default()
-                .with_value("Homer")
-                .with_var("child")
-                .build(|(parent, child)| parent_child_relationship_goal(parent, child).to_boxed());
 
             let res = child_of_homer.run();
             let children = res.owned_values_of("child");
@@ -128,5 +146,5 @@ fn query_construction(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, query_construction);
+criterion_group!(benches, relation_construction, query_construction);
 criterion_main!(benches);
