@@ -1555,8 +1555,8 @@ where
     conjunction(goal1, goal2)
 }
 
-/// Returns the states that are true of all of a set of goals. Equivalent to a
-/// logical and.
+/// A `Goal` that maps a conjunction relationship between an arbitrary number of
+/// [Term]s.
 ///
 /// # Examples
 ///
@@ -1608,8 +1608,7 @@ where
     G: Goal<T>,
 {
     fn apply(&self, state: State<T>) -> Stream<T> {
-        // start from the tail.
-        let goals = self.goals.iter().rev();
+        let goals = self.goals.iter();
         let initial_state = vec![state];
 
         goals.fold(initial_state, |stream, goal| {
@@ -1689,4 +1688,140 @@ where
 {
     let goals = goals.into();
     conjunction_plus(goals)
+}
+
+/// A `Goal` that maps a disjunction relationship between an arbitrary number of
+/// [Term]s.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     DisjunctionPlus::new(vec![
+///         equal(Term::var(x), Term::value(1)),
+///         equal(Term::var(x), Term::value(2)),
+///         equal(Term::var(x), Term::value(3))
+///     ])
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(
+///     [Term::value(1), Term::value(2), Term::value(3)].as_slice(),
+///     res.as_slice()
+/// );
+/// ```
+pub struct DisjunctionPlus<T, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    _value_kind: std::marker::PhantomData<T>,
+    goals: Vec<G>,
+}
+
+impl<T, G> DisjunctionPlus<T, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    pub fn new(goals: Vec<G>) -> Self {
+        Self {
+            _value_kind: std::marker::PhantomData,
+            goals,
+        }
+    }
+}
+
+impl<T, G> Goal<T> for DisjunctionPlus<T, G>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    fn apply(&self, state: State<T>) -> Stream<T> {
+        // start from the tail.
+        let goals = self.goals.iter();
+
+        let mut stream = goals
+            .flat_map(|goal| goal.apply(state.clone()))
+            .collect::<Vec<_>>();
+
+        // deduplicate any redundant states.
+        stream.dedup();
+        stream
+    }
+}
+
+/// Returns the states that are true of any of a set of goals. Equivalent to a
+/// logical or.
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     disjunction_plus([
+///         equal(Term::var(x), Term::value(1)),
+///         equal(Term::var(x), Term::value(2)),
+///         equal(Term::var(x), Term::value(3))
+///     ])
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(
+///     [Term::value(1), Term::value(2), Term::value(3)].as_slice(),
+///     res.as_slice()
+/// );
+/// ```
+pub fn disjunction_plus<T, G>(goals: impl Into<Vec<G>>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    let goals = goals.into();
+    DisjunctionPlus::new(goals)
+}
+
+/// Returns the states that are true of any of a set of goals. Equivalent to a
+/// logical or.
+///
+/// A shorthand alias to [disjunction_plus].
+///
+/// # Examples
+///
+/// ```
+/// use kannery::prelude::v1::*;
+/// use kannery::*;
+///
+/// let x_equals = fresh('x', |x| {
+///     any([
+///         equal(Term::var(x), Term::value(1)),
+///         equal(Term::var(x), Term::value(2)),
+///         equal(Term::var(x), Term::value(3))
+///     ])
+/// });
+/// let stream = x_equals.apply(State::<u8>::empty());
+/// let x_var = 'x'.to_var_repr(0);
+/// let res = stream.run(&Term::var(x_var));
+///
+/// assert_eq!(
+///     [Term::value(1), Term::value(2), Term::value(3)].as_slice(),
+///     res.as_slice()
+/// );
+/// ```
+pub fn any<T, G>(goals: impl Into<Vec<G>>) -> impl Goal<T>
+where
+    T: ValueRepresentable,
+    G: Goal<T>,
+{
+    let goals = goals.into();
+    disjunction_plus(goals)
 }
