@@ -447,7 +447,6 @@ where
                 let count = state.occurence_counter.get(&var_repr).copied()?;
 
                 let state_iter = (0..=(count))
-                    .into_iter()
                     .flat_map(|occ_count| state.term_mapping.get(&var.to_var_repr(occ_count)));
 
                 Some(state_iter)
@@ -506,7 +505,6 @@ where
                 let count = state.occurence_counter.get(&var_repr).copied()?;
 
                 let state_iter = (0..=(count))
-                    .into_iter()
                     .flat_map(|occ_count| state.term_mapping.get(&var.to_var_repr(occ_count)));
 
                 Some(state_iter)
